@@ -1,10 +1,10 @@
 {
-  "name": "muwanx",
+  "name": "mjswan",
   "type": "module",
   "version": "0.0.9",
   "repository": {
     "type": "git",
-    "url": "https://github.com/ttktjmt/muwanx.git"
+    "url": "https://github.com/ttktjmt/mjswan.git"
   },
   "files": [
     "dist",
