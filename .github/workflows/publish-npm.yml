@@ -8,8 +8,6 @@ jobs:
   publish:
     runs-on: ubuntu-latest
     environment: npm
-    permissions:
-      id-token: write
 
     steps:
       - uses: actions/checkout@v4
@@ -26,6 +24,7 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '20'
+          registry-url: 'https://registry.npmjs.org'
 
       - name: Build web template
         working-directory: src/mjswan/template
@@ -35,4 +34,6 @@ jobs:
 
       - name: Publish to npm
         working-directory: src/mjswan/template
-        run: npm publish --provenance --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_API_TOKEN }}
+        run: npm publish --access public
