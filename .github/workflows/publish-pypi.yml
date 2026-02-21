@@ -4,14 +4,13 @@ on:
   release:
     types: [created]
 
-permissions:
-  id-token: write  # for trusted publishing
-  contents: read
-
 jobs:
   publish:
     runs-on: ubuntu-latest
     environment: pypi
+    permissions:
+      id-token: write
+      contents: read
 
     steps:
       - uses: actions/checkout@v4
@@ -46,9 +45,6 @@ jobs:
           rm -rf .nodeenv
 
       - name: Build and publish
-        env:
-          UV_PUBLISH_USERNAME: __token__
-          UV_PUBLISH_PASSWORD: ${{ secrets.PYPI_API_TOKEN }}
         run: |
           uv build
           uv publish
