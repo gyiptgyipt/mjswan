@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
+import { VRButton } from 'three/addons/webxr/VRButton.js';
 import type { MainModule, MjData, MjModel } from 'mujoco';
 import {
   downloadExampleScenesFolder,
@@ -80,6 +81,7 @@ export class mjswanRuntime {
   private onnxModule: OnnxModule | null;
   private onnxInputDict: Record<string, ort.Tensor> | null;
   private onnxInferencing: boolean;
+  private vrButton: HTMLElement | null;
 
   constructor(mujoco: MainModule, container: HTMLElement, options: RuntimeOptions = {}) {
     this.mujoco = mujoco;
@@ -123,6 +125,14 @@ export class mjswanRuntime {
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
     this.renderer.toneMappingExposure = 1.0;
     this.container.appendChild(this.renderer.domElement);
+
+    this.vrButton = null;
+    navigator.xr?.isSessionSupported('immersive-vr').then((supported) => {
+      if (supported) {
+        this.vrButton = VRButton.createButton(this.renderer);
+        document.body.appendChild(this.vrButton);
+      }
+    });
 
     this.controls = new OrbitControls(this.camera, this.renderer.domElement);
     this.controls.target.set(0, 0.2, 0);
@@ -818,6 +828,11 @@ export class mjswanRuntime {
 
     if (this.renderer.domElement.parentElement) {
       this.renderer.domElement.parentElement.removeChild(this.renderer.domElement);
+    }
+
+    if (this.vrButton?.parentElement) {
+      this.vrButton.parentElement.removeChild(this.vrButton);
+      this.vrButton = null;
     }
 
     this.bodies = null;
