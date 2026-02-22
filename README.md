@@ -61,7 +61,7 @@ npm install mjswan
 
 You can run the demo using the `uv` command with the python package `mjswan[examples]`:
 ```sh
-uv run full
+uv run main
 ```
 
 For detailed installation instructions, visit the [documentation](https://mjswan.readthedocs.io).

@@ -1,7 +1,7 @@
 """mjswan Demo Application
 
 This is a demo application showcasing the usage of mjswan.
-The demo app is hosted on GitHub Pages: https://mjswan.github.io/mjswan/
+The demo app is hosted on GitHub Pages: https://ttktjmt.github.io/mjswan/
 """
 
 import os
