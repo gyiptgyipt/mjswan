@@ -12,7 +12,7 @@ icon: octicons/home-16
 
 ## What is mjswan?
 
-mjswan is a powerful framework for creating interactive MuJoCo simulations with real-time policy control, running entirely in the browser. Built on top of [**MU**joco **WA**sm](https://github.com/google-deepmind/mujoco/tree/main/wasm), [on**NX** runtime](https://github.com/microsoft/onnxruntime), and [three.js](https://github.com/mrdoob/three.js/), it enables easy sharing of AI robot simulation demos as static sites, perfect for GitHub Pages hosting.
+mjswan is a powerful framework for creating interactive MuJoCo simulations with real-time policy control, running entirely in the browser. Built on top of [mujoco wasm](https://github.com/google-deepmind/mujoco/tree/main/wasm){:target="_blank" rel="noopener noreferrer"}, [onnxruntime](https://github.com/microsoft/onnxruntime){:target="_blank" rel="noopener noreferrer"}, and [three.js](https://github.com/mrdoob/three.js){:target="_blank" rel="noopener noreferrer"}, it enables easy sharing of AI robot simulation demos as static sites, perfect for GitHub Pages hosting.
 
 ## Key Features
 
@@ -67,10 +67,10 @@ mjswan is perfect for:
 
 ## Live Demos
 
-- [Main Demo](https://ttktjmt.github.io/mjswan) - Main mjswan demos
-- [MyoSuite](https://ttktjmt.github.io/mjswan/myosuite) - Musculoskeletal models
-- [MuJoCo Menagerie](https://ttktjmt.github.io/mjswan/menagerie) - Various high-quality robot models
-- [MuJoCo Playground](https://ttktjmt.github.io/mjswan/playground) - Interactive environments
+- [Main Demo](https://ttktjmt.github.io/mjswan){:target="_blank" rel="noopener noreferrer"} - Main mjswan demos
+- [MyoSuite](https://ttktjmt.github.io/mjswan/myosuite){:target="_blank" rel="noopener noreferrer"} - Musculoskeletal models
+- [MuJoCo Menagerie](https://ttktjmt.github.io/mjswan/menagerie){:target="_blank" rel="noopener noreferrer"} - Various high-quality robot models
+- [MuJoCo Playground](https://ttktjmt.github.io/mjswan/playground){:target="_blank" rel="noopener noreferrer"} - Interactive environments
 
 ## Quick Example
 
@@ -84,8 +84,8 @@ builder = mjswan.Builder()
 # Add a project
 project = builder.add_project(name="My Robot")
 
-# Create a MuJoCo model
-model = mujoco.MjModel.from_xml_string("""
+# Create a MuJoCo Spec
+spec = mujoco.MjSpec.from_string("""
 <mujoco>
   <worldbody>
     <light diffuse=".5 .5 .5" pos="0 0 3" dir="0 0 -1"/>
@@ -99,7 +99,7 @@ model = mujoco.MjModel.from_xml_string("""
 """)
 
 # Add a scene
-project.add_scene(model=model, name="My Scene")
+project.add_scene(spec=spec, name="My Scene")
 
 # Build and launch
 app = builder.build()
@@ -108,12 +108,14 @@ app.launch()
 
 ➔ Check out more examples in the [Examples](getting-started/examples.md) section!
 
-## Community
+## Links
 
-- [GitHub Repository](https://github.com/ttktjmt/mjswan)
-- [PyPI Package](https://pypi.org/project/mjswan)
-- [npm Package](https://www.npmjs.com/package/mjswan)
+- [GitHub Repository](https://github.com/ttktjmt/mjswan){:target="_blank" rel="noopener noreferrer"}
+- [PyPI Package](https://pypi.org/project/mjswan){:target="_blank" rel="noopener noreferrer"}
+- [npm Package](https://www.npmjs.com/package/mjswan){:target="_blank" rel="noopener noreferrer"}
+- [Documentation](https://mjswan.readthedocs.io/){:target="_blank" rel="noopener noreferrer"}
+- [mjswan - MyoConference 2026 Presentation](https://youtu.be/0B4Ky0hf2Gg){:target="_blank" rel="noopener noreferrer"}
 
 ## License
 
-mjswan is licensed under the [Apache-2.0 License](https://github.com/ttktjmt/mjswan/blob/main/LICENSE).
+mjswan is licensed under the [Apache-2.0 License](https://github.com/ttktjmt/mjswan/blob/main/LICENSE){:target="_blank" rel="noopener noreferrer"}.

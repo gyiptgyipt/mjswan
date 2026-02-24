@@ -13,5 +13,5 @@ uv pip install -r requirements.txt
 
 ## Development Commands
 
-- `make serve` - Start a live-reloading server for documentation
-- `make build` - Build the documentation site
+- `mkdocs serve` - Start a live-reloading server for documentation
+- `mkdocs build` - Build the documentation site
