@@ -4,8 +4,10 @@ from __future__ import annotations
 
 import os
 import posixpath
+import struct
 import xml.etree.ElementTree as ET
 import zipfile
+import zlib
 from pathlib import Path
 from typing import IO, Union
 
@@ -130,8 +132,98 @@ def _rewrite_xml_paths(xml_str: str, mesh_dir: str, texture_dir: str) -> str:
             if f:
                 elem.set("file", _make_zip_safe_path(f))
 
+    # Fix the <default> hierarchy that spec.to_xml() may emit incorrectly:
+    #
+    # 1. Remove nested <default> elements with no (or empty) class attribute.
+    #    MuJoCo rejects them with "empty class name".  The root <default>
+    #    (direct child of <mujoco>) legitimately has no class, so only
+    #    children of other <default> elements are candidates for removal.
+    #
+    # 2. Merge <default class="X"> elements that are wrapped in another
+    #    <default class="X"> with the same name.  MuJoCo rejects them with
+    #    "repeated default class name".  We inline the inner element's children
+    #    into the outer one and remove the inner duplicate.
+    def _fix_default_tree(elem: ET.Element) -> None:
+        # Only remove classless <default> children when the parent is itself a
+        # <default> element.  The root <default> (direct child of <mujoco>) has
+        # no class legitimately and must not be removed.
+        parent_is_default = elem.tag == "default"
+        for child in list(elem):
+            if child.tag != "default":
+                continue
+            cls = child.get("class")
+            if not cls and parent_is_default:
+                # Rule 1: remove classless nested defaults
+                elem.remove(child)
+                continue
+            if cls:
+                # Rule 2: merge same-named direct children into this element
+                same_named = [
+                    gc for gc in child if gc.tag == "default" and gc.get("class") == cls
+                ]
+                for dup in same_named:
+                    insert_pos = list(child).index(dup)
+                    for grandchild in list(dup):
+                        child.insert(insert_pos, grandchild)
+                        insert_pos += 1
+                    child.remove(dup)
+            # Recurse after fixing this level
+            _fix_default_tree(child)
+
+    _fix_default_tree(root)
+
     ET.indent(root, space="  ")
     return ET.tostring(root, encoding="unicode", xml_declaration=True) + "\n"
+
+
+def _buffer_texture_to_png(data: bytes | bytearray, width: int, height: int) -> bytes:
+    """Encode raw RGB/RGBA texture buffer data as a PNG bytestring (stdlib only).
+
+    MuJoCo buffer textures store pixel data in memory without a backing file.
+    This function converts that raw data to a portable PNG so it can be
+    included in a ZIP archive.
+
+    Args:
+        data: Raw pixel bytes (RGB or RGBA, uint8, row-major).
+        width: Texture width in pixels.
+        height: Texture height in pixels.
+
+    Returns:
+        PNG-encoded bytes.
+
+    Raises:
+        ValueError: If dimensions are zero or the channel count is unsupported.
+    """
+    raw = bytes(data) if isinstance(data, (bytes, bytearray)) else data.tobytes()
+
+    n_pixels = width * height
+    if n_pixels == 0:
+        raise ValueError("zero-area texture")
+    total = len(raw)
+    if total % n_pixels != 0:
+        raise ValueError(f"data length {total} is not divisible by {n_pixels} pixels")
+    nchannel = total // n_pixels
+    if nchannel not in (3, 4):
+        raise ValueError(f"unsupported channel count {nchannel} (expected 3 or 4)")
+
+    def _chunk(tag: bytes, payload: bytes) -> bytes:
+        crc = zlib.crc32(tag + payload) & 0xFFFFFFFF
+        return struct.pack(">I", len(payload)) + tag + payload + struct.pack(">I", crc)
+
+    color_type = 2 if nchannel == 3 else 6  # 2 = RGB, 6 = RGBA
+    ihdr = _chunk(
+        b"IHDR", struct.pack(">IIBBBBB", width, height, 8, color_type, 0, 0, 0)
+    )
+
+    stride = width * nchannel
+    scanlines = bytearray()
+    for y in range(height):
+        scanlines += b"\x00"  # filter type: None
+        scanlines += raw[y * stride : (y + 1) * stride]
+    idat = _chunk(b"IDAT", zlib.compress(bytes(scanlines)))
+    iend = _chunk(b"IEND", b"")
+
+    return b"\x89PNG\r\n\x1a\n" + ihdr + idat + iend
 
 
 def to_zip_deflated(spec: mujoco.MjSpec, file: Union[str, IO[bytes]]) -> None:
@@ -149,16 +241,37 @@ def to_zip_deflated(spec: mujoco.MjSpec, file: Union[str, IO[bytes]]) -> None:
     mesh_dir = spec.meshdir or ""
     texture_dir = spec.texturedir or ""
 
-    # Collect asset files from disk with normalised zip-entry paths
+    # Collect asset files.  For each referenced file we first try to read it
+    # from disk; if not found we fall back to spec.assets using suffix matching.
+    # Libraries like mjlab store model files in spec.assets under keys with an
+    # extra path prefix (e.g. "assets/robot/model.stl") while the XML and
+    # mesh.file use the shorter relative path ("robot/model.stl").
     files_to_zip: dict[str, bytes | str] = {}
+
+    def _read_asset(rel: str) -> bytes | None:
+        """Return asset bytes from disk or spec.assets, or None if not found."""
+        full = os.path.join(base_dir, rel)
+        if os.path.isfile(full):
+            return Path(full).read_bytes()
+        assets = spec.assets
+        if not assets:
+            return None
+        if rel in assets:
+            return assets[rel]
+        # Suffix match: spec.assets key ends with "/" + rel
+        # (e.g. "assets/robot/model.stl" ends with "robot/model.stl")
+        for key, data in assets.items():
+            if key.endswith("/" + rel):
+                return data
+        return None
 
     for mesh in spec.meshes:
         if not mesh.file:
             continue
         rel = posixpath.join(mesh_dir, mesh.file) if mesh_dir else mesh.file
-        full = os.path.join(base_dir, rel)
-        if os.path.isfile(full):
-            files_to_zip[_make_zip_safe_path(rel)] = Path(full).read_bytes()
+        data = _read_asset(rel)
+        if data is not None:
+            files_to_zip[_make_zip_safe_path(rel)] = data
 
     for texture in spec.textures:
         for fname in [texture.file] + [
@@ -167,26 +280,59 @@ def to_zip_deflated(spec: mujoco.MjSpec, file: Union[str, IO[bytes]]) -> None:
             if not fname:
                 continue
             rel = posixpath.join(texture_dir, fname) if texture_dir else fname
-            full = os.path.join(base_dir, rel)
-            if os.path.isfile(full):
-                files_to_zip[_make_zip_safe_path(rel)] = Path(full).read_bytes()
+            data = _read_asset(rel)
+            if data is not None:
+                files_to_zip[_make_zip_safe_path(rel)] = data
 
     for hfield in spec.hfields:
         if not hfield.file:
             continue
-        full = os.path.join(base_dir, hfield.file)
-        if os.path.isfile(full):
-            files_to_zip[_make_zip_safe_path(hfield.file)] = Path(full).read_bytes()
+        data = _read_asset(hfield.file)
+        if data is not None:
+            files_to_zip[_make_zip_safe_path(hfield.file)] = data
 
     for skin in spec.skins:
         if not skin.file:
             continue
-        full = os.path.join(base_dir, skin.file)
-        if os.path.isfile(full):
-            files_to_zip[_make_zip_safe_path(skin.file)] = Path(full).read_bytes()
+        data = _read_asset(skin.file)
+        if data is not None:
+            files_to_zip[_make_zip_safe_path(skin.file)] = data
+
+    # Export buffer textures (no backing file) as PNG before serialising to XML.
+    # MuJoCo's spec.to_xml() raises FatalError for buffer textures, so we
+    # temporarily assign each one a filename, write its PNG bytes into the ZIP,
+    # then restore the spec to its original state after to_xml() returns.
+    _buffer_tex_restore: list[tuple[mujoco.MjsTexture, str]] = []
+    for i, texture in enumerate(spec.textures):
+        if texture.file:
+            continue  # file-backed texture already collected above
+        try:
+            data = texture.data
+            if data is None or len(data) == 0:
+                continue
+        except AttributeError:
+            continue
+        w, h = texture.width, texture.height
+        if w <= 0 or h <= 0:
+            continue
+        tex_label = texture.name if texture.name else str(i)
+        png_filename = f"_buf_{tex_label}.png"
+        try:
+            png_bytes = _buffer_texture_to_png(data, w, h)
+        except ValueError:
+            continue
+        rel = posixpath.join(texture_dir, png_filename) if texture_dir else png_filename
+        files_to_zip[_make_zip_safe_path(rel)] = png_bytes
+        _buffer_tex_restore.append((texture, texture.file))
+        texture.file = png_filename
 
     # Generate XML and rewrite paths
     xml_str = spec.to_xml()
+
+    # Restore spec to avoid mutating the caller's object
+    for texture, orig_file in _buffer_tex_restore:
+        texture.file = orig_file
+
     xml_str = _rewrite_xml_paths(xml_str, mesh_dir, texture_dir)
     files_to_zip[spec.modelname + ".xml"] = xml_str
 

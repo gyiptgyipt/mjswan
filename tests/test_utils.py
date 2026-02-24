@@ -15,6 +15,7 @@ import mujoco
 import pytest
 
 from mjswan.utils import (
+    _buffer_texture_to_png,
     _make_zip_safe_path,
     _rewrite_xml_paths,
     _strip_leading_dotdot,
@@ -208,6 +209,91 @@ class TestRewriteXmlPaths:
         tex = root.find(".//texture")
         assert tex is not None
         assert tex.get("file") == "skybox.png"
+
+    def test_classless_nested_default_removed(self):
+        """Classless <default /> nested inside another <default> must be removed."""
+        xml_in = (
+            "<mujoco><default>"
+            "<default />"
+            '<default class="robot"><geom density="100"/></default>'
+            "</default></mujoco>"
+        )
+        result = _rewrite_xml_paths(xml_in, mesh_dir="", texture_dir="")
+        root = ET.fromstring(result)
+        outer = root.find("default")
+        assert outer is not None
+        for d in [c for c in outer if c.tag == "default"]:
+            assert d.get("class"), (
+                "Nested <default> without class should have been removed"
+            )
+
+    def test_empty_class_nested_default_removed(self):
+        """<default class=""> nested inside another <default> must also be removed."""
+        xml_in = (
+            "<mujoco><default>"
+            '<default class=""/>'
+            '<default class="robot"><geom density="100"/></default>'
+            "</default></mujoco>"
+        )
+        result = _rewrite_xml_paths(xml_in, mesh_dir="", texture_dir="")
+        root = ET.fromstring(result)
+        outer = root.find("default")
+        assert outer is not None
+        for d in [c for c in outer if c.tag == "default"]:
+            assert d.get("class"), "Nested <default class=''> should have been removed"
+
+    def test_repeated_default_class_merged(self):
+        """<default class='X'> wrapping another <default class='X'> must be merged."""
+        xml_in = (
+            "<mujoco><default>"
+            '<default class="robot/main">'
+            '<default class="robot/main">'
+            '<default class="robot/arm"><geom density="100"/></default>'
+            "</default>"
+            "</default>"
+            "</default></mujoco>"
+        )
+        result = _rewrite_xml_paths(xml_in, mesh_dir="", texture_dir="")
+        root = ET.fromstring(result)
+        # Should be: <default><default class="robot/main"><default class="robot/arm">
+        outer = root.find("default")
+        assert outer is not None
+        robot_main = next((c for c in outer if c.tag == "default"), None)
+        assert robot_main is not None
+        assert robot_main.get("class") == "robot/main"
+        # robot/main must NOT have a same-named child
+        for child in robot_main:
+            if child.tag == "default":
+                assert child.get("class") != "robot/main", "Duplicate class not merged"
+        # robot/arm must be present
+        robot_arm = next((c for c in robot_main if c.tag == "default"), None)
+        assert robot_arm is not None
+        assert robot_arm.get("class") == "robot/arm"
+
+    def test_named_default_class_preserved(self):
+        """Named default classes must not be touched."""
+        xml_in = (
+            "<mujoco><default>"
+            '<default class="robot"><geom density="100"/></default>'
+            "</default></mujoco>"
+        )
+        result = _rewrite_xml_paths(xml_in, mesh_dir="", texture_dir="")
+        root = ET.fromstring(result)
+        outer = root.find("default")
+        assert outer is not None
+        robot = next(c for c in outer if c.tag == "default")
+        assert robot.get("class") == "robot"
+
+    def test_root_default_without_class_preserved(self):
+        """The root <default> (no class attr) must not be removed."""
+        xml_in = (
+            "<mujoco><default>"
+            '<default class="robot"><geom density="100"/></default>'
+            "</default></mujoco>"
+        )
+        result = _rewrite_xml_paths(xml_in, mesh_dir="", texture_dir="")
+        root = ET.fromstring(result)
+        assert root.find("default") is not None, "Root <default> must be preserved"
 
     def test_absolute_mesh_path_becomes_basename(self):
         abs_path = "/home/user/.venv/lib/site-packages/pkg/meshes/robot.stl"
@@ -436,6 +522,106 @@ def test_to_zip_deflated_spec_unchanged(model_path: str):
     assert spec.meshdir == orig_meshdir
     assert spec.texturedir == orig_texturedir
     assert [(m.name, m.file) for m in spec.meshes] == orig_files
+
+
+# ===========================================================================
+# _buffer_texture_to_png
+# ===========================================================================
+class TestBufferTextureToPng:
+    def test_returns_valid_png_signature(self):
+        data = bytes(4 * 4 * 3)  # 4x4 RGB, all zeros
+        png = _buffer_texture_to_png(data, 4, 4)
+        assert png[:8] == b"\x89PNG\r\n\x1a\n"
+
+    def test_rgb_produces_bytes(self):
+        data = bytes(range(12))  # 2x2 RGB
+        png = _buffer_texture_to_png(data, 2, 2)
+        assert len(png) > 0
+
+    def test_rgba_produces_bytes(self):
+        data = bytes(range(16))  # 2x2 RGBA
+        png = _buffer_texture_to_png(data, 2, 2)
+        assert len(png) > 0
+
+    def test_numpy_array_input(self):
+        import numpy as np
+
+        data = np.zeros((4, 4, 3), dtype=np.uint8)
+        png = _buffer_texture_to_png(data, 4, 4)
+        assert png[:8] == b"\x89PNG\r\n\x1a\n"
+
+    def test_zero_area_raises(self):
+        with pytest.raises(ValueError, match="zero-area"):
+            _buffer_texture_to_png(b"", 0, 0)
+
+    def test_unsupported_channels_raises(self):
+        # 1x1 pixel with 5 bytes → 5 channels (unsupported)
+        with pytest.raises(ValueError, match="unsupported channel count"):
+            _buffer_texture_to_png(bytes(5), 1, 1)
+
+    def test_mismatched_data_length_raises(self):
+        # 7 bytes for 2x2 (4 pixels) → not divisible
+        with pytest.raises(ValueError, match="not divisible"):
+            _buffer_texture_to_png(bytes(7), 2, 2)
+
+
+class TestBufferTextureInZip:
+    @pytest.fixture()
+    def spec_with_buffer_texture(self):
+        """Build a minimal MjSpec that contains a buffer texture.
+
+        Returns None if the current MuJoCo version does not expose a writable
+        ``data`` attribute on MjsTexture.
+        """
+        import numpy as np
+
+        spec = mujoco.MjSpec()
+        spec.modelname = "buf_test"
+        tex = spec.add_texture()
+        tex.name = "buf_tex"
+        tex.type = mujoco.mjtTexture.mjTEXTURE_2D
+        tex.width = 4
+        tex.height = 4
+        try:
+            tex.data = np.zeros(4 * 4 * 3, dtype=np.uint8)
+        except (AttributeError, TypeError):
+            return None
+        # Verify this actually IS a buffer texture (to_xml should fail).
+        try:
+            spec.to_xml()
+            return None  # no error → not treated as buffer texture
+        except mujoco.FatalError:
+            pass
+        return spec
+
+    def test_to_zip_deflated_succeeds(self, spec_with_buffer_texture):
+        if spec_with_buffer_texture is None:
+            pytest.skip("Cannot create buffer texture in this MuJoCo version")
+        buf = io.BytesIO()
+        to_zip_deflated(spec_with_buffer_texture, buf)  # must not raise
+        buf.seek(0)
+        with zipfile.ZipFile(buf) as zf:
+            names = zf.namelist()
+        assert "buf_test.xml" in names
+
+    def test_png_entry_present_in_zip(self, spec_with_buffer_texture):
+        if spec_with_buffer_texture is None:
+            pytest.skip("Cannot create buffer texture in this MuJoCo version")
+        buf = io.BytesIO()
+        to_zip_deflated(spec_with_buffer_texture, buf)
+        buf.seek(0)
+        with zipfile.ZipFile(buf) as zf:
+            png_entries = [n for n in zf.namelist() if n.endswith(".png")]
+        assert len(png_entries) > 0, "Expected a PNG entry for the buffer texture"
+
+    def test_spec_not_mutated_after_call(self, spec_with_buffer_texture):
+        if spec_with_buffer_texture is None:
+            pytest.skip("Cannot create buffer texture in this MuJoCo version")
+        spec = spec_with_buffer_texture
+        orig_files = [(t.name, t.file) for t in spec.textures]
+        buf = io.BytesIO()
+        to_zip_deflated(spec, buf)
+        assert [(t.name, t.file) for t in spec.textures] == orig_files
 
 
 # ===========================================================================
