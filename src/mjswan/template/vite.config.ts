@@ -40,16 +40,6 @@ export default defineConfig({
   server: {
     port: 8000,
     host: true,
-    headers: {
-      'Cross-Origin-Opener-Policy': 'same-origin',
-      'Cross-Origin-Embedder-Policy': 'require-corp',
-    },
-  },
-  preview: {
-    headers: {
-      'Cross-Origin-Opener-Policy': 'same-origin',
-      'Cross-Origin-Embedder-Policy': 'require-corp',
-    },
   },
   build: {
     outDir: 'dist',
@@ -58,10 +48,6 @@ export default defineConfig({
     chunkSizeWarningLimit: 11000,
     rollupOptions: {
       input: path.resolve(__dirname, 'index.html'),
-      onwarn(warning, warn) {
-        if (warning.message.includes('coi-serviceworker')) return;
-        warn(warning);
-      },
     },
   },
   worker: {
