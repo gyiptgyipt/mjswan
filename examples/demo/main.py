@@ -9,6 +9,8 @@ from pathlib import Path
 
 import mujoco
 import onnx
+from mjlab.scene import Scene
+from mjlab.tasks.registry import load_env_cfg
 
 import mjswan
 
@@ -102,88 +104,112 @@ def setup_builder() -> mjswan.Builder:
     )
 
     menagerie_project.add_scene(
+        name="Agilex Piper",
         spec=mujoco.MjSpec.from_file(
             "assets/scene/mujoco_menagerie/agilex_piper/scene.xml"
         ),
-        name="Agilex Piper",
     )
     menagerie_project.add_scene(
+        name="Agility Cassie",
         spec=mujoco.MjSpec.from_file(
             "assets/scene/mujoco_menagerie/agility_cassie/scene.xml"
         ),
-        name="Agility Cassie",
     )
     menagerie_project.add_scene(
-        spec=mujoco.MjSpec.from_file("assets/scene/mujoco_menagerie/aloha/scene.xml"),
         name="ALOHA",
+        spec=mujoco.MjSpec.from_file("assets/scene/mujoco_menagerie/aloha/scene.xml"),
     )
     menagerie_project.add_scene(
+        name="ANYmal B",
         spec=mujoco.MjSpec.from_file(
             "assets/scene/mujoco_menagerie/anybotics_anymal_b/scene.xml"
         ),
-        name="ANYmal B",
     )
     menagerie_project.add_scene(
+        name="ANYmal C",
         spec=mujoco.MjSpec.from_file(
             "assets/scene/mujoco_menagerie/anybotics_anymal_c/scene.xml"
         ),
-        name="ANYmal C",
     )
+
+    # Anymal C from mujocolab/anymal_c_velocity
+    anymal_c_velocity_env_cfg = load_env_cfg("Mjlab-Velocity-Flat-Anymal-C")
+    anymal_c_velocity_env_cfg.scene.num_envs = 1
+    anymal_c_velocity_scene = Scene(anymal_c_velocity_env_cfg.scene, device="cpu")
+    anymal_c_scene = menagerie_project.add_scene(
+        name="ANYmal C Velocity",
+        spec=anymal_c_velocity_scene.spec,
+    )
+    anymal_c_scene.add_policy(
+        name="velocity 3000 iters",
+        policy=onnx.load(
+            "assets/policy/anymal_c_velocity/Mjlab-Velocity-Flat-Anymal-C.3000.onnx"
+        ),
+        config_path="assets/policy/anymal_c_velocity/Mjlab-Velocity-Flat-Anymal-C.3000.json",
+    ).add_velocity_command(
+        lin_vel_x=(-1.0, 1.0),
+        lin_vel_y=(-1.0, 1.0),
+        ang_vel_z=(-0.5, 0.5),
+        default_lin_vel_x=0.5,
+        default_lin_vel_y=0.0,
+        default_ang_vel_z=0.0,
+    )
+
     menagerie_project.add_scene(
+        name="Apptronik Apollo",
         spec=mujoco.MjSpec.from_file(
             "assets/scene/mujoco_menagerie/apptronik_apollo/scene.xml"
         ),
-        name="Apptronik Apollo",
     )
     menagerie_project.add_scene(
-        spec=mujoco.MjSpec.from_file("assets/scene/mujoco_menagerie/arx_l5/scene.xml"),
         name="ARX L5",
+        spec=mujoco.MjSpec.from_file("assets/scene/mujoco_menagerie/arx_l5/scene.xml"),
     )
     menagerie_project.add_scene(
+        name="Berkeley Humanoid",
         spec=mujoco.MjSpec.from_file(
             "assets/scene/mujoco_menagerie/berkeley_humanoid/scene.xml"
         ),
-        name="Berkeley Humanoid",
     )
     menagerie_project.add_scene(
+        name="Bitcraze Crazyflie 2",
         spec=mujoco.MjSpec.from_file(
             "assets/scene/mujoco_menagerie/bitcraze_crazyflie_2/scene.xml"
         ),
-        name="Bitcraze Crazyflie 2",
     )
     menagerie_project.add_scene(
+        name="Booster T1",
         spec=mujoco.MjSpec.from_file(
             "assets/scene/mujoco_menagerie/booster_t1/scene.xml"
         ),
-        name="Booster T1",
     )
     menagerie_project.add_scene(
+        name="Boston Dynamics Spot",
         spec=mujoco.MjSpec.from_file(
             "assets/scene/mujoco_menagerie/boston_dynamics_spot/scene.xml"
         ),
-        name="Boston Dynamics Spot",
     )
     menagerie_project.add_scene(
+        name="Dynamixel 2R",
         spec=mujoco.MjSpec.from_file(
             "assets/scene/mujoco_menagerie/dynamixel_2r/scene.xml"
         ),
-        name="Dynamixel 2R",
     )
     menagerie_project.add_scene(
-        spec=mujoco.MjSpec.from_file("assets/scene/mujoco_menagerie/flybody/scene.xml"),
         name="Flybody",
+        spec=mujoco.MjSpec.from_file("assets/scene/mujoco_menagerie/flybody/scene.xml"),
     )
     menagerie_project.add_scene(
+        name="Fourier N1",
         spec=mujoco.MjSpec.from_file(
             "assets/scene/mujoco_menagerie/fourier_n1/scene.xml"
         ),
-        name="Fourier N1",
     )
     menagerie_project.add_scene(
+        name="Franka Emika Panda",
         spec=mujoco.MjSpec.from_file(
             "assets/scene/mujoco_menagerie/franka_emika_panda/scene.xml"
         ),
-        name="Franka Emika Panda",
     )
     menagerie_project.add_scene(
         spec=mujoco.MjSpec.from_file(
