@@ -87,7 +87,7 @@ def setup_builder() -> mjswan.Builder:
     Returns:
         Configured Builder instance ready to be built.
     """
-    # _fix_unitree_mujoco_macos()
+    _fix_unitree_mujoco_macos()
     # Ensure asset-relative paths resolve regardless of current working directory.
     os.chdir(Path(__file__).resolve().parent)
     base_path = os.getenv("MJSWAN_BASE_PATH", "/")

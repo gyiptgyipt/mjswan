@@ -35,19 +35,21 @@ jobs:
 
     - name: Checkout repository
       uses: actions/checkout@v4
-      with:
-        submodules: recursive
 
     - name: Install uv
       uses: astral-sh/setup-uv@v5
       with:
-        python-version: '3.11'
+        python-version: '3.12'
 
     - name: Install Python dependencies
       run: uv sync --extra examples
 
     - name: Build demo application
-      run: MJSWAN_BASE_PATH="/mjswan/" MJSWAN_NO_LAUNCH=1 uv run python examples/demo/main.py
+      run: |
+        (while sleep 30; do echo "Still building..."; done) &
+        KEEP_ALIVE=$!
+        PYTHONUNBUFFERED=1 MJSWAN_BASE_PATH="/mjswan/" MJSWAN_NO_LAUNCH=1 uv run python examples/demo/main.py
+        kill $KEEP_ALIVE
 
     - name: Deploy to gh-pages branch
       uses: peaceiris/actions-gh-pages@v4
