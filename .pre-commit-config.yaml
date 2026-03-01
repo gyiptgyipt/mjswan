@@ -20,6 +20,15 @@ repos:
       - id: ruff-format
         exclude: '^typings/'
 
+  - repo: local
+    hooks:
+      - id: pytest-fast
+        name: pytest (L1/L2, no slow)
+        entry: pytest -m "not slow" --tb=short -q
+        language: system
+        pass_filenames: false
+        always_run: true
+
   # You can disable this block if you don't edit JS/TS files.
   - repo: local
     hooks:
