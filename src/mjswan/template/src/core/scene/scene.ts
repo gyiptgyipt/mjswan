@@ -4,7 +4,7 @@ import { mujocoAssetCollector } from '../utils/mujocoAssetCollector';
 import { normalizeScenePath } from '../utils/pathUtils';
 import { loadMjzFile } from '../utils/mjzLoader';
 import { createLights } from './lights';
-import { createTexture } from './textures';
+import { createTexture, createSkyboxTexture } from './textures';
 import { createTendonMeshes } from './tendons';
 
 const DEFAULT_BASE_URL = (import.meta.env.BASE_URL || '/').replace(/\/+$/, '');
@@ -505,6 +505,9 @@ export async function loadSceneFromURL(
   parent.lights = lights;
   parent.meshes = meshes;
   parent.mujocoRoot = mujocoRoot;
+
+  const skybox = createSkyboxTexture(mujoco, mjModel);
+  parent.scene.background = skybox;
 
   if (!mjModel || 'deleted' in mjModel) {
     throw new Error('loadSceneFromURL: mjModel is invalid or already deleted');

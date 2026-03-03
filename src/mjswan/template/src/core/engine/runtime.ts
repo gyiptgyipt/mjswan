@@ -111,7 +111,6 @@ export class mjswanRuntime {
 
     this.scene = new THREE.Scene();
     this.scene.name = 'scene';
-    this.scene.background = new THREE.Color(0.15, 0.25, 0.35);
 
     this.camera = new THREE.PerspectiveCamera(45, width / height, 0.001, 1000);
     this.camera.name = 'PerspectiveCamera';
@@ -962,6 +961,9 @@ export class mjswanRuntime {
     // Re-add root to scene
     this.scene.add(this.mujocoRoot);
 
+    // Restore skybox background
+    this.scene.background = resources.skybox;
+
     // Run forward dynamics
     this.mujoco.mj_forward(this.mjModel, this.mjData);
 
@@ -1017,6 +1019,7 @@ export class mjswanRuntime {
       lights: this.lights,
       meshes: {},
       mujocoRoot: this.mujocoRoot,
+      skybox: this.scene.background instanceof THREE.CubeTexture ? this.scene.background : null,
       fsFiles,
       estimatedMemoryBytes,
     });

@@ -21,6 +21,7 @@ export interface CachedSceneResources {
   lights: THREE.Light[];
   meshes: Record<number, THREE.BufferGeometry>;
   mujocoRoot: THREE.Group;
+  skybox: THREE.CubeTexture | null;
 
   // Emscripten FS paths
   fsFiles: string[];
@@ -224,6 +225,9 @@ export class SceneCacheManager {
     const startTime = performance.now();
 
     // 1. Dispose Three.js resources
+    if (resources.skybox) {
+      resources.skybox.dispose();
+    }
     if (resources.mujocoRoot) {
       this.disposeThreeJSObject(resources.mujocoRoot);
     }
