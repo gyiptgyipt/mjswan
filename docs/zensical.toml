@@ -9,17 +9,22 @@ copyright = "&copy;2026 mjswan Contributors"
 nav = [
   { "Home" = "index.md" },
   { "Getting Started" = [
-    { "Core Concepts" = "getting-started/core-concepts.md" },
     { "Installation" = "getting-started/installation.md" },
+    { "Quickstart" = "getting-started/quickstart.md" },
+    { "Core Concepts" = "getting-started/core-concepts.md" },
     { "Examples" = "getting-started/examples.md" },
-    { "Migrating from mjlab" = "getting-started/mjlab-migration.md" },
+    { "Using mjlab" = "getting-started/mjlab.md" },
+  ]},
+  { "Guides" = [
+    { "Deployment" = "guides/deployment.md" },
   ]},
   { "API Reference" = [
     { "Core API" = "api/core.md" },
   ]},
   { "Notes" = [
     { "Embeddings" = "notes/embeddings.md" },
-    { "Projects" = "notes/projects.md" },
+    { "Policy Config" = "notes/policy-config.md" },
+    { "Resources" = "notes/resources.md" },
   ]},
 ]
 

@@ -74,17 +74,13 @@ mjswan is perfect for:
 
 ## Quick Example
 
-```py
+```python
 import mujoco
 import mjswan
 
-# Create a builder
 builder = mjswan.Builder()
-
-# Add a project
 project = builder.add_project(name="My Robot")
 
-# Create a MuJoCo Spec
 spec = mujoco.MjSpec.from_string("""
 <mujoco>
   <worldbody>
@@ -98,15 +94,13 @@ spec = mujoco.MjSpec.from_string("""
 </mujoco>
 """)
 
-# Add a scene
 project.add_scene(spec=spec, name="My Scene")
 
-# Build and launch
 app = builder.build()
 app.launch()
 ```
 
-➔ Check out more examples in the [Examples](getting-started/examples.md) section!
+See [Examples](getting-started/examples.md) for a walkthrough and more patterns.
 
 ## Links
 

@@ -29,14 +29,15 @@ You can also embed mjswan visualizations directly in Google Colab notebooks.
 
 ```python
 import os
-os.environ["mjswan_NO_LAUNCH"] = "1"
+os.environ["MJSWAN_NO_LAUNCH"] = "1"
 
+import mujoco
 import mjswan
 
 # Build your application
 builder = mjswan.Builder()
 project = builder.add_project(name="Demo")
-project.add_scene(model="path/to/model.xml", name="Scene")
+project.add_scene(spec=mujoco.MjSpec.from_file("path/to/model.xml"), name="Scene")
 app = builder.build()
 ```
 
@@ -49,11 +50,17 @@ import threading
 from google.colab import output
 
 PORT = 8000
-DIRECTORY = "path/to/dist"  # Your built app directory
+DIRECTORY = "dist"  # directory produced by builder.build()
 
 class Handler(http.server.SimpleHTTPRequestHandler):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, directory=DIRECTORY, **kwargs)
+
+    def end_headers(self):
+        # Required for SharedArrayBuffer (used by MuJoCo WASM threading)
+        self.send_header("Cross-Origin-Opener-Policy", "same-origin")
+        self.send_header("Cross-Origin-Embedder-Policy", "require-corp")
+        super().end_headers()
 
 def start_server():
     with socketserver.TCPServer(("", PORT), Handler) as httpd:
