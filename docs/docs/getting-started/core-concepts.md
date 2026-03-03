@@ -12,9 +12,10 @@ mjswan follows a hierarchical structure:
 
 ```
 Builder
-  └── Project(s)
-        └── Scene(s)
-              └── Policy (optional)
+  └── Project
+        └── Scene
+              ├── Policy (optional)
+              └── Splat  (optional)
 ```
 
 ### Builder
