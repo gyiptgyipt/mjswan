@@ -6,6 +6,7 @@ for programmatically creating interactive MuJoCo simulations.
 
 from __future__ import annotations
 
+import gc
 import inspect
 import json
 import shutil
@@ -14,6 +15,13 @@ from pathlib import Path
 
 import mujoco
 import onnx
+from rich.progress import (
+    BarColumn,
+    MofNCompleteColumn,
+    Progress,
+    SpinnerColumn,
+    TextColumn,
+)
 
 from . import __version__
 from ._build_client import ClientBuilder
@@ -29,15 +37,18 @@ class Builder:
     interactive MuJoCo simulations with ONNX policies. It handles projects, scenes, and policies hierarchically.
     """
 
-    def __init__(self, base_path: str = "/") -> None:
+    def __init__(self, base_path: str = "/", gtm_id: str | None = None) -> None:
         """Initialize a new Builder instance.
 
         Args:
             base_path: Base path for the application (e.g., '/mjswan/').
                       This is used for deployment to subdirectories.
+            gtm_id: Google Tag Manager container ID (e.g., 'GTM-XXXXXXX').
+                   If provided, the GTM snippet is injected into the built HTML.
         """
         self._projects: list[ProjectConfig] = []
         self._base_path = base_path
+        self._gtm_id = gtm_id
 
     def add_project(self, name: str, *, id: str | None = None) -> ProjectHandle:
         """Add a new project to the builder.
@@ -210,7 +221,7 @@ class Builder:
             if package_json.exists():
                 print("Building the mjswan application...")
                 builder = ClientBuilder(template_dir)
-                builder.build(base_path=self._base_path)
+                builder.build(base_path=self._base_path, gtm_id=self._gtm_id)
 
             # Copy all files from template to output_path
             shutil.copytree(
@@ -277,6 +288,7 @@ class Builder:
         self._save_config_json(output_path)
 
         # Save MuJoCo models and ONNX policies per project
+        max_name_len = max(len(p.name) for p in self._projects)
         for project in self._projects:
             # Use 'main' for projects without ID, otherwise use the project ID
             project_dir_name = project.id if project.id else "main"
@@ -298,68 +310,87 @@ class Builder:
                     shutil.copy(str(src_static), str(project_dir / static_name))
 
             # Save scenes and policies
-            for scene in project.scenes:
-                scene_id = name2id(scene.name)
-                scene_dir = project_assets_dir / scene_id
-                scene_dir.mkdir(parents=True, exist_ok=True)
-                scene_path = scene_dir / scene.scene_filename
-                if scene.spec is not None:
-                    scene.spec.assets.update(collect_spec_assets(scene.spec))
-                    to_zip_deflated(scene.spec, str(scene_path))  # Saves as .mjz
-                else:
-                    if scene.model is None:
-                        raise RuntimeError(
-                            f"Scene '{scene.name}' has no model to save as .mjb"
-                        )
-                    mujoco.mj_saveModel(scene.model, str(scene_path))  # Saves as .mjb
-
-                # Save policies
-                for policy in scene.policies:
-                    policy_id = name2id(policy.name)
-                    policy_path = scene_dir / f"{policy_id}.onnx"
-                    onnx.save(policy.model, str(policy_path))
-
-                    config_path = getattr(policy, "config_path", None)
-                    if config_path:
-                        config_src = Path(config_path).expanduser()
-                        if not config_src.is_absolute():
-                            config_src = (Path.cwd() / config_src).resolve()
-                        if config_src.exists():
-                            target = policy_path.with_suffix(".json")
-                            try:
-                                with open(config_src, "r") as f:
-                                    data = json.load(f)
-                                data.setdefault("onnx", {})
-                                if isinstance(data["onnx"], dict):
-                                    data["onnx"]["path"] = policy_path.name
-                                # Serialize commands if any are defined
-                                if policy.commands:
-                                    data["commands"] = {
-                                        name: cmd.to_dict()
-                                        for name, cmd in policy.commands.items()
-                                    }
-                                with open(target, "w") as f:
-                                    json.dump(data, f, indent=2)
-                            except Exception:
-                                shutil.copy(str(config_src), str(target))
-                        else:
-                            warnings.warn(
-                                f"Policy config path not found: {config_src}",
-                                category=RuntimeWarning,
-                                stacklevel=2,
+            with Progress(
+                SpinnerColumn(spinner_name="dots"),
+                TextColumn("[progress.description]{task.description}"),
+                BarColumn(),
+                MofNCompleteColumn(),
+                TextColumn("[dim]{task.fields[scene]}"),
+            ) as progress:
+                task = progress.add_task(
+                    project.name.ljust(max_name_len),
+                    total=len(project.scenes),
+                    scene="",
+                )
+                for scene in project.scenes:
+                    progress.update(task, scene=scene.name)
+                    scene_id = name2id(scene.name)
+                    scene_dir = project_assets_dir / scene_id
+                    scene_dir.mkdir(parents=True, exist_ok=True)
+                    scene_path = scene_dir / scene.scene_filename
+                    if scene.spec is not None:
+                        scene.spec.assets.update(collect_spec_assets(scene.spec))
+                        to_zip_deflated(scene.spec, str(scene_path))  # Saves as .mjz
+                        scene.spec = None
+                    else:
+                        if scene.model is None:
+                            raise RuntimeError(
+                                f"Scene '{scene.name}' has no model to save as .mjb"
                             )
-                    elif policy.commands:
-                        # No config_path but commands defined - create config with commands only
-                        target = policy_path.with_suffix(".json")
-                        data = {
-                            "onnx": {"path": policy_path.name},
-                            "commands": {
-                                name: cmd.to_dict()
-                                for name, cmd in policy.commands.items()
-                            },
-                        }
-                        with open(target, "w") as f:
-                            json.dump(data, f, indent=2)
+                        mujoco.mj_saveModel(
+                            scene.model, str(scene_path)
+                        )  # Saves as .mjb
+                        scene.model = None
+                    gc.collect()
+
+                    # Save policies
+                    for policy in scene.policies:
+                        policy_id = name2id(policy.name)
+                        policy_path = scene_dir / f"{policy_id}.onnx"
+                        onnx.save(policy.model, str(policy_path))
+
+                        config_path = getattr(policy, "config_path", None)
+                        if config_path:
+                            config_src = Path(config_path).expanduser()
+                            if not config_src.is_absolute():
+                                config_src = (Path.cwd() / config_src).resolve()
+                            if config_src.exists():
+                                target = policy_path.with_suffix(".json")
+                                try:
+                                    with open(config_src, "r") as f:
+                                        data = json.load(f)
+                                    data.setdefault("onnx", {})
+                                    if isinstance(data["onnx"], dict):
+                                        data["onnx"]["path"] = policy_path.name
+                                    # Serialize commands if any are defined
+                                    if policy.commands:
+                                        data["commands"] = {
+                                            name: cmd.to_dict()
+                                            for name, cmd in policy.commands.items()
+                                        }
+                                    with open(target, "w") as f:
+                                        json.dump(data, f, indent=2)
+                                except Exception:
+                                    shutil.copy(str(config_src), str(target))
+                            else:
+                                warnings.warn(
+                                    f"Policy config path not found: {config_src}",
+                                    category=RuntimeWarning,
+                                    stacklevel=2,
+                                )
+                        elif policy.commands:
+                            # No config_path but commands defined - create config with commands only
+                            target = policy_path.with_suffix(".json")
+                            data = {
+                                "onnx": {"path": policy_path.name},
+                                "commands": {
+                                    name: cmd.to_dict()
+                                    for name, cmd in policy.commands.items()
+                                },
+                            }
+                            with open(target, "w") as f:
+                                json.dump(data, f, indent=2)
+                    progress.advance(task)
 
         print(f"✓ Saved mjswan application to: {output_path}")
 

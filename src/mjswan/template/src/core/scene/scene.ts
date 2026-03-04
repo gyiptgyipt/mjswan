@@ -4,7 +4,7 @@ import { mujocoAssetCollector } from '../utils/mujocoAssetCollector';
 import { normalizeScenePath } from '../utils/pathUtils';
 import { loadMjzFile } from '../utils/mjzLoader';
 import { createLights } from './lights';
-import { createTexture } from './textures';
+import { createTexture, createSkyboxTexture } from './textures';
 import { createTendonMeshes } from './tendons';
 
 const DEFAULT_BASE_URL = (import.meta.env.BASE_URL || '/').replace(/\/+$/, '');
@@ -65,6 +65,106 @@ function normalizePathSegments(path: string): string {
     resolved.push(part);
   }
   return resolved.join('/');
+}
+
+function createInfinitePlaneShaderMaterial(params: {
+  color: THREE.Color;
+  opacity: number;
+  texture: THREE.Texture | null;
+  // Precomputed UV scale per axis, matching MuJoCo's GL_OBJECT_PLANE formula:
+  //   infinite axis: 0.5 * texrepeat
+  //   finite axis:   0.5 * texrepeat / halfSize
+  uvScaleX: number;
+  uvScaleZ: number;
+  planeY: number;
+  // World-space center of the geom (for finite-extent clipping)
+  centerX: number;
+  centerZ: number;
+  infiniteX: boolean;
+  infiniteZ: boolean;
+  halfExtentX: number;
+  halfExtentZ: number;
+}): THREE.ShaderMaterial {
+  return new THREE.ShaderMaterial({
+    uniforms: {
+      uColor: { value: params.color },
+      uOpacity: { value: params.opacity },
+      uTexture: { value: params.texture },
+      uHasTexture: { value: params.texture !== null },
+      uUVScale: { value: new THREE.Vector2(params.uvScaleX, params.uvScaleZ) },
+      uPlaneY: { value: params.planeY },
+      uCenterX: { value: params.centerX },
+      uCenterZ: { value: params.centerZ },
+      uInfiniteX: { value: params.infiniteX },
+      uInfiniteZ: { value: params.infiniteZ },
+      uHalfExtentX: { value: params.halfExtentX },
+      uHalfExtentZ: { value: params.halfExtentZ },
+      uProjInverse: { value: new THREE.Matrix4() },
+      uCamWorldMatrix: { value: new THREE.Matrix4() },
+    },
+    vertexShader: /* glsl */ `
+      varying vec2 vNDC;
+      void main() {
+        vNDC = position.xy;
+        gl_Position = vec4(position.xy, 1.0, 1.0);
+      }
+    `,
+    fragmentShader: /* glsl */ `
+      precision highp float;
+      varying vec2 vNDC;
+      uniform vec3 uColor;
+      uniform float uOpacity;
+      uniform sampler2D uTexture;
+      uniform bool uHasTexture;
+      uniform vec2 uUVScale;
+      uniform float uPlaneY;
+      uniform float uCenterX;
+      uniform float uCenterZ;
+      uniform bool uInfiniteX;
+      uniform bool uInfiniteZ;
+      uniform float uHalfExtentX;
+      uniform float uHalfExtentZ;
+      uniform mat4 uProjInverse;
+      uniform mat4 uCamWorldMatrix;
+
+      void main() {
+        // Unproject NDC to view-space ray
+        vec4 viewRay = uProjInverse * vec4(vNDC, 1.0, 1.0);
+        viewRay /= viewRay.w;
+
+        // Transform to world-space direction
+        vec3 worldDir = normalize((uCamWorldMatrix * vec4(viewRay.xyz, 0.0)).xyz);
+
+        // Ray-plane intersection at y = uPlaneY
+        float denom = worldDir.y;
+        if (abs(denom) < 1e-6) discard;
+
+        float t = (uPlaneY - cameraPosition.y) / denom;
+        if (t < 0.0) discard;
+
+        vec3 worldPos = cameraPosition + t * worldDir;
+
+        // Clip finite extents relative to geom center
+        if (!uInfiniteX && abs(worldPos.x - uCenterX) > uHalfExtentX) discard;
+        if (!uInfiniteZ && abs(worldPos.z - uCenterZ) > uHalfExtentZ) discard;
+
+        if (uHasTexture) {
+          // MuJoCo GL_OBJECT_PLANE formula:
+          //   infinite: S = worldPos * 0.5 * texrepeat
+          //   finite:   S = worldPos * 0.5 * texrepeat / halfSize
+          // Both cases are baked into uUVScale on the JS side.
+          vec2 uv = fract(worldPos.xz * uUVScale);
+          gl_FragColor = texture2D(uTexture, uv) * vec4(uColor, uOpacity);
+        } else {
+          gl_FragColor = vec4(uColor, uOpacity);
+        }
+      }
+    `,
+    transparent: params.opacity < 1.0,
+    depthTest: true,
+    depthWrite: false,
+    side: THREE.DoubleSide,
+  });
 }
 
 export async function loadSceneFromURL(
@@ -217,21 +317,14 @@ export async function loadSceneFromURL(
     let geometry: THREE.BufferGeometry | undefined;
     switch (type) {
       case mujoco.mjtGeom.mjGEOM_PLANE.value: {
-        let width: number;
-        let height: number;
-        if (size[0] === 0) {
-          width = 100;
+        if (size[0] === 0 || size[1] === 0) {
+          // PlaneGeometry(2,2) in XY plane: vertices at (±1, ±1, 0)
+          // Used as a full-screen clip-space quad by the infinite plane shader
+          geometry = new THREE.PlaneGeometry(2, 2);
         } else {
-          width = size[0] * 2.0;
+          geometry = new THREE.PlaneGeometry(size[0] * 2.0, size[1] * 2.0);
+          geometry.rotateX(-Math.PI / 2);
         }
-        if (size[1] === 0) {
-          height = 100;
-        } else {
-          height = size[1] * 2.0;
-        }
-
-        geometry = new THREE.PlaneGeometry(width, height);
-        geometry.rotateX(-Math.PI / 2);
         break;
       }
       case mujoco.mjtGeom.mjGEOM_HFIELD.value:
@@ -481,6 +574,39 @@ export async function loadSceneFromURL(
     if (type === mujoco.mjtGeom.mjGEOM_ELLIPSOID.value) {
       mesh.scale.set(size[0], size[2], size[1]);
     }
+    if (type === mujoco.mjtGeom.mjGEOM_PLANE.value && (size[0] === 0 || size[1] === 0)) {
+      const baseMat = (
+        Array.isArray(currentMaterial) ? currentMaterial[0] : currentMaterial
+      ) as THREE.MeshPhysicalMaterial;
+      const tex = baseMat.map ?? null;
+      const repeatX = tex?.repeat.x ?? 1;
+      const repeatY = tex?.repeat.y ?? 1;
+      // MuJoCo GL_OBJECT_PLANE formula: coeff = 0.5 * texrepeat / halfSize (finite),
+      // or 0.5 * texrepeat (infinite, halfSize=0)
+      const uvScaleX = size[0] > 0 ? (repeatX * 0.5) / size[0] : repeatX * 0.5;
+      const uvScaleZ = size[1] > 0 ? (repeatY * 0.5) / size[1] : repeatY * 0.5;
+      const shaderMat = createInfinitePlaneShaderMaterial({
+        color: baseMat.color.clone(),
+        opacity: baseMat.opacity,
+        texture: tex,
+        uvScaleX,
+        uvScaleZ,
+        planeY: mesh.position.y,
+        centerX: mesh.position.x,
+        centerZ: mesh.position.z,
+        infiniteX: size[0] === 0,
+        infiniteZ: size[1] === 0,
+        halfExtentX: size[0],
+        halfExtentZ: size[1],
+      });
+      mesh.material = shaderMat;
+      mesh.frustumCulled = false;
+      mesh.renderOrder = 1;
+      mesh.onBeforeRender = (_renderer, _scene, camera) => {
+        shaderMat.uniforms.uProjInverse.value.copy(camera.projectionMatrixInverse);
+        shaderMat.uniforms.uCamWorldMatrix.value.copy(camera.matrixWorld);
+      };
+    }
   }
 
   createTendonMeshes(mujocoRoot, mjModel);
@@ -505,6 +631,9 @@ export async function loadSceneFromURL(
   parent.lights = lights;
   parent.meshes = meshes;
   parent.mujocoRoot = mujocoRoot;
+
+  const skybox = createSkyboxTexture(mujoco, mjModel);
+  parent.scene.background = skybox;
 
   if (!mjModel || 'deleted' in mjModel) {
     throw new Error('loadSceneFromURL: mjModel is invalid or already deleted');

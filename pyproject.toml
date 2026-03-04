@@ -28,7 +28,11 @@ authors = [
 description = "Browser-based MuJoCo simulation with real-time policy control"
 readme = "README.md"
 license = { text="Apache-2.0" }
-requires-python = ">=3.10"
+# labmaze (transitive dep via myosuite -> dm-control) has no pre-built wheel for
+# Python 3.13+, forcing a Bazel source build that fails with Bazel 8.x (WORKSPACE
+# support removed). Pin to <3.13 until labmaze publishes a cp313 wheel.
+# https://github.com/google-deepmind/dm_control/issues/511
+requires-python = ">=3.10, <3.13"
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Intended Audience :: Developers",
@@ -48,6 +52,7 @@ dependencies = [
     "mujoco==3.5.0",
     "nodeenv>=1.9.1",
     "onnx>=1.20.0",
+    "rich>=13.0.0",
     "wandb>=0.23.1",
 ]
 
@@ -57,7 +62,6 @@ dev = [
     "pre-commit>=3.3.2",
     "ruff>=0.14.9",
     "pytest>=9.0.2",
-    "nodeenv>=1.9.0",
 ]
 examples = [
     "mjlab",
@@ -65,6 +69,10 @@ examples = [
     "gymnasium",
     "torch>=2.9.1",
     "musclemimic-models>=1.0.3",
+    "anymal-c-velocity",
+    "robot-descriptions>=1.22.0",
+    "playground>=0.1.0",
+    "myosuite",
 ]
 
 [project.urls]
@@ -112,9 +120,6 @@ lint.ignore = [
 exclude = [
     ".nodeenv",
     "typings",
-    "examples/demo/assets/scene/myosuite",
-    "examples/demo/assets/scene/mujoco_menagerie",
-    "examples/demo/assets/scene/mujoco_playground",
 ]
 
 [tool.uv]
@@ -127,9 +132,12 @@ override-dependencies = [
 ]
 
 [tool.uv.sources]
-mjlab = { git = "https://github.com/mujocolab/mjlab" }
 mjlab_myosuite = { git = "https://github.com/MyoHub/mjlab_myosuite" }
+anymal-c-velocity = { git = "https://github.com/mujocolab/anymal_c_velocity.git" }
 warp-lang = { index = "nvidia", marker = "sys_platform != 'darwin'" }
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+markers = [
+    "slow: triggers frontend build — exclude from pre-commit with -m 'not slow'",
+]

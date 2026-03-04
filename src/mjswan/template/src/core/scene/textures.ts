@@ -96,7 +96,7 @@ function create2DTexture(mjModel: MjModel, texId: number): THREE.DataTexture | n
   return texture;
 }
 
-function createCubeTexture(mjModel: MjModel, texId: number): THREE.CubeTexture | null {
+function createCubeTexture(mjModel: MjModel, texId: number, faceOrder = [3, 2, 0, 1, 4, 5]): THREE.CubeTexture | null {
   const width = mjModel.tex_width ? Number(mjModel.tex_width[texId]) : 0;
   const height = mjModel.tex_height ? Number(mjModel.tex_height[texId]) : 0;
 
@@ -146,7 +146,7 @@ function createCubeTexture(mjModel: MjModel, texId: number): THREE.CubeTexture |
     faces.push(faceData);
   }
 
-  const reorderedFaces = [faces[3], faces[2], faces[0], faces[1], faces[4], faces[5]];
+  const reorderedFaces = faceOrder.map(i => faces[i]);
 
   const cubeTexture = new THREE.CubeTexture();
 
@@ -210,5 +210,36 @@ export function createTexture({
   }
 
   console.warn(`Unsupported texture type ${type} for texId: ${texId}`);
+  return null;
+}
+
+export function createSkyboxTexture(mujoco: MainModule, mjModel: MjModel): THREE.CubeTexture | null {
+  if (!mjModel.tex_type) {
+    return null;
+  }
+  for (let i = 0; i < mjModel.ntex; i++) {
+    if (Number(mjModel.tex_type[i]) === mujoco.mjtTexture.mjTEXTURE_SKYBOX.value) {
+      // Use identity face order: MuJoCo stores skybox faces with +Z (index 2) as up and -Z (index 3) as down,
+      // which maps directly to Three.js +Y (index 2) up and -Y (index 3) down in the CubeTexture layout.
+      const cube = createCubeTexture(mjModel, i, [0, 1, 2, 3, 4, 5]);
+      if (cube) {
+        // Flip faces horizontally: MuJoCo's cubemap is outside-in, but a Three.js skybox is viewed from inside.
+        const faces = cube.image as unknown as HTMLCanvasElement[];
+        for (let f = 0; f < faces.length; f++) {
+          const src = faces[f];
+          const flipped = document.createElement('canvas');
+          flipped.width = src.width;
+          flipped.height = src.height;
+          const ctx = flipped.getContext('2d')!;
+          ctx.translate(src.width, 0);
+          ctx.scale(-1, 1);
+          ctx.drawImage(src, 0, 0);
+          faces[f] = flipped;
+        }
+        cube.needsUpdate = true;
+      }
+      return cube;
+    }
+  }
   return null;
 }

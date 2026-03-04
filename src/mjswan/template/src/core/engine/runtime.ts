@@ -76,6 +76,9 @@ export class mjswanRuntime {
       qvelAdr: number[];
       actionScale: Float32Array;
       defaultJointPos: Float32Array;
+      // Per-actuator flag: true = position actuator (ctrl=target_pos, PD internal),
+      // false = motor actuator (ctrl=torque, PD computed in browser from kp/kd).
+      positionActuator: boolean[];
       kp: Float32Array;
       kd: Float32Array;
     }
@@ -112,7 +115,6 @@ export class mjswanRuntime {
 
     this.scene = new THREE.Scene();
     this.scene.name = 'scene';
-    this.scene.background = new THREE.Color(0.15, 0.25, 0.35);
 
     this.camera = new THREE.PerspectiveCamera(45, width / height, 0.001, 1000);
     this.camera.name = 'PerspectiveCamera';
@@ -554,6 +556,7 @@ export class mjswanRuntime {
       qvelAdr: number[];
       actionScale: Float32Array;
       defaultJointPos: Float32Array;
+      positionActuator: boolean[];
       kp: Float32Array;
       kd: Float32Array;
     }
@@ -576,11 +579,30 @@ export class mjswanRuntime {
     const kp = this.normalizeControlArray(config.stiffness, numActions, 0.0);
     const kd = this.normalizeControlArray(config.damping, numActions, 0.0);
 
+    // Detect per-actuator whether the scene uses position actuators (biastype=affine,
+    // ctrl=target_pos, PD handled internally by MuJoCo) or motor actuators
+    // (biastype=none, ctrl=torque, PD must be computed externally from kp/kd).
+    const affineBiasValue = this.mujoco.mjtBias?.mjBIAS_AFFINE?.value ?? 1;
+    const positionActuator: boolean[] = mapping.ctrlAdr.map((adr) => {
+      if (adr < 0 || !this.mjModel) return false;
+      return this.mjModel.actuator_biastype[adr] === affineBiasValue;
+    });
+
+    const isPosition = positionActuator.some(Boolean);
+    const isMotor = positionActuator.some((v) => !v);
+    if (isPosition && isMotor) {
+      console.warn('[PolicyRunner] Mixed actuator types detected; behavior may be incorrect.');
+    }
+    console.log(
+      `[PolicyRunner] Actuator mode: ${isPosition ? 'position (ctrl=target_pos)' : 'motor (ctrl=torque, external PD)'}`
+    );
+
     return {
       controlType,
       ...mapping,
       actionScale,
       defaultJointPos,
+      positionActuator,
       kp,
       kd,
     };
@@ -634,7 +656,7 @@ export class mjswanRuntime {
       return;
     }
 
-    const { controlType, ctrlAdr, qposAdr, qvelAdr, actionScale, defaultJointPos, kp, kd } =
+    const { controlType, ctrlAdr, qposAdr, qvelAdr, actionScale, defaultJointPos, positionActuator, kp, kd } =
       this.policyControl;
     const numActions = ctrlAdr.length;
     const actions = this.policyRunner?.getLastActions() ?? new Float32Array(numActions);
@@ -644,12 +666,19 @@ export class mjswanRuntime {
     if (controlType === 'joint_position') {
       for (let i = 0; i < numActions; i++) {
         const target = defaultJointPos[i] + actionScale[i] * actions[i];
-        const qpos = this.mjData.qpos[qposAdr[i]];
-        const qvel = this.mjData.qvel[qvelAdr[i]];
-        const torque = kp[i] * (target - qpos) + kd[i] * (0 - qvel);
         const ctrlIndex = ctrlAdr[i];
-        if (ctrlIndex >= 0) {
-          ctrl[ctrlIndex] = torque;
+        if (ctrlIndex < 0) continue;
+
+        if (positionActuator[i]) {
+          // Position actuator (biastype=affine): ctrl = target joint position.
+          // MuJoCo computes force = kp*(ctrl - qpos) - kd*qvel internally.
+          ctrl[ctrlIndex] = target;
+        } else {
+          // Motor actuator (biastype=none): ctrl = torque.
+          // PD must be computed externally using kp/kd from the policy config.
+          const qpos = this.mjData.qpos[qposAdr[i]];
+          const qvel = this.mjData.qvel[qvelAdr[i]];
+          ctrl[ctrlIndex] = kp[i] * (target - qpos) + kd[i] * (0 - qvel);
         }
       }
     } else if (controlType === 'torque') {
@@ -691,7 +720,8 @@ export class mjswanRuntime {
         this.onnxInputDict = { ...this.onnxInputDict, ...carry };
       }
 
-      const actionTensor = result.action ?? result.policy ?? null;
+      const outKey = this.onnxModule.outKeys[0];
+      const actionTensor = (outKey ? result[outKey] : null) ?? result.action ?? result.policy ?? null;
       if (!actionTensor) {
         return;
       }
@@ -982,6 +1012,9 @@ export class mjswanRuntime {
     // Re-add root to scene
     this.scene.add(this.mujocoRoot);
 
+    // Restore skybox background
+    this.scene.background = resources.skybox;
+
     // Run forward dynamics
     this.mujoco.mj_forward(this.mjModel, this.mjData);
 
@@ -1037,6 +1070,7 @@ export class mjswanRuntime {
       lights: this.lights,
       meshes: {},
       mujocoRoot: this.mujocoRoot,
+      skybox: this.scene.background instanceof THREE.CubeTexture ? this.scene.background : null,
       fsFiles,
       estimatedMemoryBytes,
     });
