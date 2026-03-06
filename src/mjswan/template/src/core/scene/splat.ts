@@ -4,7 +4,10 @@ export type { SplatMesh };
 
 export interface SplatConfig {
   name: string;
-  url: string;
+  /** Relative asset path for bundled .spz files (resolved to URL by App.tsx). */
+  path?: string;
+  /** External URL for non-bundled .spz files. Exactly one of path or url must be set. */
+  url?: string;
   scale?: number;
   xOffset?: number;
   yOffset?: number;
@@ -45,7 +48,11 @@ export function applySplatTransform(splat: SplatMesh, config: SplatConfig): void
 }
 
 export function loadSplat(config: SplatConfig, scene: THREE.Scene): SplatMesh {
-  const splat = new SplatMesh({ url: config.url });
+  const url = config.url;
+  if (!url) {
+    throw new Error('SplatConfig.url must be resolved before calling loadSplat. Use App.tsx resolvedSplatConfig.');
+  }
+  const splat = new SplatMesh({ url });
   applySplatTransform(splat, config);
   scene.add(splat);
   return splat;

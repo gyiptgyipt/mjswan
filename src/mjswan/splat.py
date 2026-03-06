@@ -16,8 +16,15 @@ class SplatConfig:
     name: str
     """Display name shown in the viewer control panel."""
 
-    url: str
-    """URL or local path to the .spz splat file."""
+    source: str | None = None
+    """Local path to a .spz splat file to bundle into the app (recommended).
+    The file is copied into the built application during :meth:`Builder.build`.
+    Mutually exclusive with ``url``."""
+
+    url: str | None = None
+    """URL to an external .spz splat file (alternative to ``source``).
+    The file is not bundled; the browser fetches it at runtime.
+    Mutually exclusive with ``source``."""
 
     scale: float = 1.0
     """Metric scale factor (converts splat units to meters)."""
@@ -50,14 +57,20 @@ class SplatConfig:
     """Additional metadata for the splat."""
 
     def to_dict(self) -> dict[str, Any]:
+        """Serialize to a dict for config.json.
+
+        When ``source`` is set, the ``path`` key is added externally by
+        :meth:`Builder._build_splat_config_dict` after copying the file.
+        """
         d: dict[str, Any] = {
             "name": self.name,
-            "url": self.url,
             "scale": self.scale,
             "xOffset": self.x_offset,
             "yOffset": self.y_offset,
             "zOffset": self.z_offset,
         }
+        if self.url is not None:
+            d["url"] = self.url
         if self.roll != 0.0:
             d["roll"] = self.roll
         if self.pitch != 0.0:
@@ -78,10 +91,11 @@ class SplatHandle:
     added to a scene, mirroring the pattern used by PolicyHandle.
 
     Example:
-        splat = scene.add_splat(
-            "https://cdn.example.com/scene.spz",
+        scene.add_splat(
+            "Outdoor",
+            source="background.spz",
             scale=1.35,
-            ground_offset=1.0,
+            z_offset=1.0,
         )
     """
 
@@ -90,8 +104,13 @@ class SplatHandle:
         self._scene = scene
 
     @property
-    def url(self) -> str:
-        """URL or local path to the .spz splat file."""
+    def source(self) -> str | None:
+        """Local path to the .spz splat file (bundled into the app)."""
+        return self._config.source
+
+    @property
+    def url(self) -> str | None:
+        """URL to an external .spz splat file."""
         return self._config.url
 
     @property

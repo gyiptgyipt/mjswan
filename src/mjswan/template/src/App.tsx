@@ -20,7 +20,7 @@ interface SceneConfig {
   metadata: Record<string, unknown>;
   policies: PolicyConfig[];
   path?: string;
-  splat?: SplatConfig;
+  splats?: SplatConfig[];
 }
 
 interface ProjectConfig {
@@ -217,6 +217,7 @@ function AppContent() {
   const [selectedPolicy, setSelectedPolicy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [selectedSplat, setSelectedSplat] = useState<string | null>(null);
+  const [customSplatUrl, setCustomSplatUrl] = useState<string | null>(null);
   const runtimeRef = useRef<mjswanRuntime | null>(null);
   const { showLoading, hideLoading } = useLoading();
 
@@ -280,6 +281,26 @@ function AppContent() {
     const projectDir = currentProject.id ? currentProject.id : 'main';
     return `${projectDir}/assets/${selectedPolicyConfig.config}`.replace(/\/+/g, '/');
   }, [currentProject, selectedPolicyConfig]);
+
+  // Resolve bundled splat paths to URLs the viewer can fetch.
+  // When config.json uses "path" (bundled), convert it to a relative URL.
+  // When config.json uses "url" (external), pass it through unchanged.
+  const resolvedSplats = useMemo(() => {
+    if (!currentProject || !currentScene?.splats?.length) return [] as SplatConfig[];
+    const projectDir = currentProject.id ? currentProject.id : 'main';
+    return currentScene.splats.map((splat) => {
+      if (splat.path) {
+        const resolvedUrl = `${projectDir}/assets/${splat.path}`.replace(/\/+/g, '/');
+        return { ...splat, url: resolvedUrl };
+      }
+      return splat;
+    });
+  }, [currentProject, currentScene?.splats]);
+
+  const resolvedSplatConfig = useMemo(() => {
+    if (!selectedSplat) return customSplatUrl ? { name: 'Custom', url: customSplatUrl } : null;
+    return resolvedSplats.find((s) => s.name === selectedSplat) ?? null;
+  }, [resolvedSplats, selectedSplat, customSplatUrl]);
   const projectOptions = useMemo(() => {
     if (!config) {
       return [] as { value: string; label: string }[];
@@ -317,7 +338,9 @@ function AppContent() {
 
   // Reset splat selection when switching scenes
   useEffect(() => {
-    setSelectedSplat(currentScene?.splat ? 'splat' : null);
+    const firstSplat = currentScene?.splats?.[0];
+    setSelectedSplat(firstSplat ? firstSplat.name : null);
+    setCustomSplatUrl(null);
   }, [currentScene]);
 
   const handleRuntimeReady = useCallback((runtime: mjswanRuntime) => {
@@ -325,17 +348,22 @@ function AppContent() {
   }, []);
 
   const splatOptions = useMemo(() => {
-    if (!currentScene?.splat) return [] as { value: string; label: string }[];
-    return [{ value: 'splat', label: currentScene.splat.name }];
-  }, [currentScene?.splat]);
-
-  const [customSplatUrl, setCustomSplatUrl] = useState<string | null>(null);
+    if (!currentScene?.splats?.length) return [] as { value: string; label: string }[];
+    return currentScene.splats.map((s) => ({ value: s.name, label: s.name }));
+  }, [currentScene?.splats]);
 
   const handleSplatChange = useCallback((value: string | null) => {
-    runtimeRef.current?.setSplatVisible(value !== null);
+    if (value === null) {
+      runtimeRef.current?.setSplatVisible(false);
+    } else {
+      const splat = resolvedSplats.find((s) => s.name === value);
+      if (splat) {
+        runtimeRef.current?.setSplat(splat);
+      }
+    }
     setSelectedSplat(value);
     setCustomSplatUrl(null);
-  }, []);
+  }, [resolvedSplats]);
 
   const handleSplatUrlLoad = useCallback(async (url: string): Promise<boolean> => {
     try {
@@ -350,11 +378,11 @@ function AppContent() {
   }, []);
 
   const handleCalibrateSplat = useCallback((scale: number, xOffset: number, yOffset: number, zOffset: number, roll: number, pitch: number, yaw: number) => {
-    const splat = currentScene?.splat ?? (customSplatUrl ? { name: 'Custom', url: customSplatUrl } : null);
+    const splat = resolvedSplatConfig ?? (customSplatUrl ? { name: 'Custom', url: customSplatUrl } : null);
     if (splat) {
       runtimeRef.current?.calibrateSplat({ ...splat, scale, xOffset, yOffset, zOffset, roll, pitch, yaw });
     }
-  }, [currentScene?.splat, customSplatUrl]);
+  }, [resolvedSplatConfig, customSplatUrl]);
 
   const handleProjectChange = useCallback(
     (value: string | null) => {
@@ -438,7 +466,7 @@ function AppContent() {
           splats={splatOptions}
           splatValue={selectedSplat}
           onSplatChange={handleSplatChange}
-          splatConfig={currentScene.splat ?? null}
+          splatConfig={resolvedSplatConfig}
           onCalibrateSplat={handleCalibrateSplat}
           onSplatUrlLoad={handleSplatUrlLoad}
           policies={policyOptions}
@@ -450,7 +478,7 @@ function AppContent() {
           scenePath={scenePath}
           baseUrl={import.meta.env.BASE_URL || '/'}
           policyConfigPath={policyConfigPath}
-          splatConfig={currentScene.splat ?? null}
+          splatConfig={resolvedSplatConfig}
           onError={handleViewerError}
           onReady={handleViewerReady}
           onRuntimeReady={handleRuntimeReady}

@@ -38,8 +38,8 @@ class SceneConfig:
     metadata: dict[str, Any] = field(default_factory=dict)
     """Additional metadata for the scene."""
 
-    splat: SplatConfig | None = None
-    """Optional Gaussian Splat background configuration."""
+    splats: list[SplatConfig] = field(default_factory=list)
+    """Gaussian Splat backgrounds available for this scene."""
 
     @property
     def scene_filename(self) -> str:
@@ -108,8 +108,9 @@ class SceneHandle:
     def add_splat(
         self,
         name: str,
-        url: str,
         *,
+        source: str | None = None,
+        url: str | None = None,
         scale: float = 1.0,
         x_offset: float = 0.0,
         y_offset: float = 0.0,
@@ -122,12 +123,22 @@ class SceneHandle:
     ) -> SplatHandle:
         """Add a Gaussian Splat background to this scene.
 
-        The splat is baked into the app's config during build() and loaded
-        automatically when the scene is opened in the viewer.
+        Provide either ``source`` (recommended) or ``url`` — not both.
+
+        Using ``source`` copies the .spz file into the built application so it
+        is served locally, giving you a fully self-contained deployment with no
+        external dependencies. This is the recommended approach.
+
+        Using ``url`` keeps the .spz file on an external server. The app stays
+        smaller, but requires network access at runtime and will not work
+        offline.
 
         Args:
             name: Display name shown in the viewer control panel.
-            url: URL or local path to the .spz splat file.
+            source: Local path to a .spz splat file to bundle into the app.
+                The file is copied during :meth:`Builder.build`.
+            url: URL to an external .spz splat file. The browser fetches it at
+                runtime; the file is not bundled.
             scale: Metric scale factor. Use ``metric_scale_factor`` from your
                 capture metadata if available.
             x_offset: X-axis position offset (in scaled splat units).
@@ -148,15 +159,33 @@ class SceneHandle:
             SplatHandle for further configuration.
 
         Example:
+            # Recommended: bundle the .spz file into the app
             scene.add_splat(
                 "Outdoor",
-                "https://cdn.example.com/background.spz",
+                source="background.spz",
+                scale=1.35,
+                z_offset=1.0,
+            )
+
+            # Alternative: reference an external URL
+            scene.add_splat(
+                "Outdoor",
+                url="https://cdn.example.com/background.spz",
                 scale=1.35,
                 z_offset=1.0,
             )
         """
+        if source is None and url is None:
+            raise ValueError(
+                "Provide either 'source' (local .spz file path to bundle) "
+                "or 'url' (external URL)."
+            )
+        if source is not None and url is not None:
+            raise ValueError("Provide either 'source' or 'url', not both.")
+
         splat_config = SplatConfig(
             name=name,
+            source=source,
             url=url,
             scale=scale,
             x_offset=x_offset,
@@ -168,7 +197,7 @@ class SceneHandle:
             collider_url=collider_url,
             control=control,
         )
-        self._config.splat = splat_config
+        self._config.splats.append(splat_config)
         return SplatHandle(splat_config, self)
 
     def set_metadata(self, key: str, value: Any) -> SceneHandle:

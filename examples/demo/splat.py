@@ -15,7 +15,10 @@ import onnx
 
 import mjswan
 
-SPLAT_URL = "https://cdn.marble.worldlabs.ai/be100eec-f02e-491d-899e-d702652d424d/cb27e09c-e2ca-46c7-8abf-bcd24d2bf9ed_ceramic_500k.spz"
+SPLAT_URLs = [
+    "https://cdn.marble.worldlabs.ai/be100eec-f02e-491d-899e-d702652d424d/cb27e09c-e2ca-46c7-8abf-bcd24d2bf9ed_ceramic_500k.spz",
+    "https://cdn.marble.worldlabs.ai/09eaec3b-9114-455a-b7f1-da4d037cc511/660e6ce6-959c-42fb-8a9d-66178cb84f4d_ceramic.spz",
+]
 
 
 def setup_builder() -> mjswan.Builder:
@@ -52,13 +55,14 @@ def setup_builder() -> mjswan.Builder:
         default_lin_vel_x=0.5,
     )
 
-    scene.add_splat(
-        "Street",
-        SPLAT_URL,
-        scale=3.275,
-        z_offset=0.708,
-        control=True,
-    )
+    for splat_url in SPLAT_URLs:
+        scene.add_splat(
+            name=f"Splat {SPLAT_URLs.index(splat_url) + 1}",
+            url=splat_url,
+            scale=3.275,
+            z_offset=0.708,
+            control=True,
+        )
 
     return builder
 
