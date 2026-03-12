@@ -229,7 +229,7 @@ export async function loadSceneFromURL(
   let newModel: MjModel | null = null;
   try {
     if (modelPath.toLowerCase().endsWith('.mjb')) {
-      newModel = mujoco.MjModel.mj_loadBinary(modelPath);
+      newModel = mujoco.MjModel.mj_loadModel(modelPath);
     } else {
       // TODO: Remove mjzLoader after mujoco wasm mj_loadXML() supports mjz format loading.
       if (modelPath.toLowerCase().endsWith('.mjz')) {

@@ -39,7 +39,7 @@ const MjswanViewer = ({
       notify('Loading MuJoCo...');
       if (!mujocoRef.current) {
         const baseWasmUrl = import.meta.env.BASE_URL || '/';
-        const modulePath = `${baseWasmUrl}assets/mujoco/mujoco_wasm.js`.replace(/\/+/g, '/');
+        const modulePath = `${baseWasmUrl}assets/mujoco/mujoco.js`.replace(/\/+/g, '/');
         const mujocoModule = await import(/* @vite-ignore */ modulePath);
         mujocoRef.current = await mujocoModule.default();
       }

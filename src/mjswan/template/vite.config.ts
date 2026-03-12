@@ -55,7 +55,7 @@ export default defineConfig({
   resolve: {
     alias: {
       '@': path.resolve(__dirname, './src'),
-      'mujoco': path.resolve(__dirname, './src/mujoco/mujoco_wasm'),
+      'mujoco': path.resolve(__dirname, './src/mujoco/mujoco'),
     },
   },
   optimizeDeps: {

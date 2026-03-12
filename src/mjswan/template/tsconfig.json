@@ -16,9 +16,9 @@
     "baseUrl": ".",
     "paths": {
       "@/*": ["./src/*"],
-      "mujoco": ["./src/mujoco/mujoco_wasm"]
+      "mujoco": ["./src/mujoco/mujoco"]
     }
   },
-  "include": ["src", "public/assets/mujoco/mujoco_wasm.js"],
+  "include": ["src", "public/assets/mujoco/mujoco.js"],
   "exclude": ["node_modules", ".nodeenv", "dist"]
 }
