@@ -11,8 +11,6 @@ from pathlib import Path
 import gymnasium.logger as gym_logger
 import mujoco
 import onnx
-from mjlab.scene import Scene
-from mjlab.tasks.registry import load_env_cfg
 from mujoco_playground import registry
 
 # Suppress gymnasium logger output from myosuite
@@ -173,13 +171,10 @@ def setup_builder() -> mjswan.Builder:
 
     menagerie_project = builder.add_project(name="MuJoCo Menagerie", id="menagerie")
 
-    # ANYmal C Velocity (uses mjlab, not robot_descriptions)
-    anymal_c_velocity_env_cfg = load_env_cfg("Mjlab-Velocity-Flat-Anymal-C")
-    anymal_c_velocity_env_cfg.scene.num_envs = 1
-    anymal_c_velocity_scene = Scene(anymal_c_velocity_env_cfg.scene, device="cpu")
+    # ANYmal C Velocity from https://github.com/mujocolab/anymal_c_velocity
     anymal_c_scene = menagerie_project.add_scene(
         name="ANYmal C Velocity",
-        spec=anymal_c_velocity_scene.spec,
+        spec=mujoco.MjSpec.from_zip("assets/anymal_c_velocity/scene.mjz"),
     )
     anymal_c_scene.add_policy(
         name="velocity 3000 iters",

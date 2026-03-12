@@ -734,7 +734,7 @@ export class mjswanRuntime {
       }
 
       const outKey = this.onnxModule.outKeys[0];
-      const actionTensor = (outKey ? result[outKey] : null) ?? result.action ?? result.policy ?? null;
+      const actionTensor = result.action ?? (outKey ? result[outKey] : null) ?? result.policy ?? null;
       if (!actionTensor) {
         return;
       }

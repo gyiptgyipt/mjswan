@@ -64,15 +64,12 @@ dev = [
     "pytest>=9.0.2",
 ]
 examples = [
-    "mjlab",
-    "mjlab_myosuite",
-    "gymnasium",
+    "mjlab>=1.2.0",
     "torch>=2.9.1",
-    "musclemimic-models>=1.0.3",
-    "anymal-c-velocity",
     "robot-descriptions>=1.22.0",
     "playground>=0.1.0",
     "myosuite",
+    "gymnasium",
 ]
 
 [project.urls]
@@ -130,11 +127,12 @@ required-environments = [
 ]
 override-dependencies = [
     "mujoco==3.5.0",
+    # h5py 3.7.0 has no pre-built wheel for Python 3.12 / macOS arm64.
+    # Newer versions do, so override the version pinned by myosuite.
+    "h5py>=3.8.0",
 ]
 
 [tool.uv.sources]
-mjlab_myosuite = { git = "https://github.com/MyoHub/mjlab_myosuite" }
-anymal-c-velocity = { git = "https://github.com/mujocolab/anymal_c_velocity.git" }
 warp-lang = { index = "nvidia", marker = "sys_platform != 'darwin'" }
 
 [tool.pytest.ini_options]
