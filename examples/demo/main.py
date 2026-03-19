@@ -165,14 +165,14 @@ def setup_builder() -> mjswan.Builder:
         config_path="assets/unitree_go1/decap.json",
     ).add_velocity_command()
 
-    # ============================
-    # 2. MuJoCo Menagerie Project
-    # ============================
+    # ==============================
+    # 2. Robot Descriptions Project
+    # ==============================
 
-    menagerie_project = builder.add_project(name="MuJoCo Menagerie", id="menagerie")
+    robotdesc_project = builder.add_project(name="Robot Descriptions", id="robotdesc")
 
     # ANYmal C Velocity from https://github.com/mujocolab/anymal_c_velocity
-    anymal_c_scene = menagerie_project.add_scene(
+    anymal_c_scene = robotdesc_project.add_scene(
         name="ANYmal C Velocity",
         spec=mujoco.MjSpec.from_zip("assets/anymal_c_velocity/scene.mjz"),
     )
@@ -206,7 +206,7 @@ def setup_builder() -> mjswan.Builder:
             scene_name = module.replace("_mj_description", "")
             scene_name = " ".join([word.capitalize() for word in scene_name.split("_")])
 
-            menagerie_project.add_scene(name=scene_name, spec=_rd_spec(module))
+            robotdesc_project.add_scene(name=scene_name, spec=_rd_spec(module))
 
     # =============================
     # 3. MuJoCo Playground Project
@@ -277,21 +277,21 @@ def setup_builder() -> mjswan.Builder:
 def _copy_licenses(output_dir: Path) -> None:
     """Copy LICENSE and NOTICE files into the built output.
 
-    - robot_descriptions (menagerie): copies per scene from each repo's REPOSITORY_PATH.
+    - robot_descriptions (robotdesc): copies per scene from each repo's REPOSITORY_PATH.
     - myosuite / mujoco_playground: copies to the project root from the dist-info licenses/.
     """
     import importlib.metadata
     import shutil
     from importlib import import_module
 
-    # Per-scene for robot_descriptions (menagerie project)
-    menagerie_assets = output_dir / "menagerie" / "assets"
-    if menagerie_assets.exists():
+    # Per-scene for robot_descriptions (robotdesc project)
+    robotdesc_assets = output_dir / "robotdesc" / "assets"
+    if robotdesc_assets.exists():
         for module, desc in DESCRIPTIONS.items():
             if not desc.has_mjcf:
                 continue
             scene_id = module.replace("_mj_description", "")
-            scene_dir = menagerie_assets / scene_id
+            scene_dir = robotdesc_assets / scene_id
             if not scene_dir.exists():
                 continue
             mod = import_module(f"robot_descriptions.{module}")
