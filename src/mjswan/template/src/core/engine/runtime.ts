@@ -13,7 +13,7 @@ import { loadCollider, disposeCollider } from '../scene/collider';
 import { DragStateManager } from '../utils/dragStateManager';
 import { createTendonState, updateTendonGeometry, updateTendonRendering } from '../scene/tendons';
 import { updateHeadlightFromCamera, updateLightsFromData } from '../scene/lights';
-import { threeToMjcCoordinate } from '../scene/coordinate';
+import { mjcToThreeCoordinate, threeToMjcCoordinate } from '../scene/coordinate';
 import { SceneCacheManager } from '../cache/sceneCacheManager';
 import { SceneResourceTracker } from '../cache/resourceTracker';
 import { MemoryMonitor } from '../cache/memoryMonitor';
@@ -29,6 +29,19 @@ import { getCommandManager, type CommandsConfig } from '../command';
 
 type RuntimeOptions = {
   baseUrl?: string;
+};
+
+export type CameraConfig = {
+  /** Initial camera position in MuJoCo coordinates [x, y, z]. */
+  position?: [number, number, number];
+  /** Initial look-at target in MuJoCo coordinates [x, y, z]. */
+  target?: [number, number, number];
+  /** Vertical field of view in degrees. */
+  fov?: number;
+  /** Body name for the orbit target to follow each frame. */
+  trackBodyName?: string;
+  /** Name of a MuJoCo camera defined in the scene XML. Locks to its pose. */
+  mujocoCamera?: string;
 };
 
 /** Thrown when a scene exceeds the browser's 2 GB WebAssembly memory limit. */
@@ -114,6 +127,8 @@ export class mjswanRuntime {
   private vrButton: HTMLElement | null;
   private splatMesh: SplatMesh | null;
   private colliderMesh: THREE.Group | null;
+  private cameraTrackBodyId: number | null;
+  private mujocoFixedCamIndex: number | null;
 
   constructor(mujoco: MainModule, container: HTMLElement, options: RuntimeOptions = {}) {
     this.mujoco = mujoco;
@@ -211,6 +226,8 @@ export class mjswanRuntime {
     this.onnxInferencing = false;
     this.splatMesh = null;
     this.colliderMesh = null;
+    this.cameraTrackBodyId = null;
+    this.mujocoFixedCamIndex = null;
 
     // Initialize cache system (singleton shared across runtime instances)
     this.sceneCacheManager = SceneCacheManager.getInstance(this.mujoco);
@@ -221,7 +238,8 @@ export class mjswanRuntime {
   async loadEnvironment(
     scenePath: string,
     policyConfigPath: string | null = null,
-    splatConfig: SplatConfig | null = null
+    splatConfig: SplatConfig | null = null,
+    cameraConfig: CameraConfig | null = null
   ): Promise<void> {
     await this.stop();
 
@@ -282,6 +300,8 @@ export class mjswanRuntime {
     }
 
     await this.loadPolicyConfig(policyConfigPath);
+
+    this.applyCameraConfig(cameraConfig);
 
     this.running = true;
     void this.startLoop();
@@ -901,7 +921,103 @@ export class mjswanRuntime {
     }
   }
 
+  /**
+   * Apply camera configuration after a scene is loaded.
+   * Converts MuJoCo coordinates (x forward, y left, z up) to Three.js (x right, y up, z out).
+   */
+  private applyCameraConfig(config: CameraConfig | null): void {
+    // Reset tracking state and re-enable orbit controls
+    this.cameraTrackBodyId = null;
+    this.mujocoFixedCamIndex = null;
+    this.controls.enabled = true;
+
+    if (!config) {
+      // Reset to built-in defaults
+      this.camera.fov = 45;
+      this.camera.updateProjectionMatrix();
+      this.camera.position.set(2.0, 1.7, 1.7);
+      this.controls.target.set(0, 0.2, 0);
+      this.controls.update();
+      return;
+    }
+
+    if (config.fov != null) {
+      this.camera.fov = config.fov;
+      this.camera.updateProjectionMatrix();
+    }
+
+    if (config.position != null) {
+      this.camera.position.copy(mjcToThreeCoordinate(config.position));
+    }
+
+    if (config.target != null) {
+      this.controls.target.copy(mjcToThreeCoordinate(config.target));
+    }
+
+    if (config.position != null || config.target != null) {
+      this.controls.update();
+    }
+
+    // Set up body tracking (orbit target follows the body)
+    if (config.trackBodyName && this.mjModel) {
+      for (let b = 0; b < this.mjModel.nbody; b++) {
+        if (this.mjModel.body(b).name === config.trackBodyName) {
+          this.cameraTrackBodyId = b;
+          break;
+        }
+      }
+      if (this.cameraTrackBodyId === null) {
+        console.warn(`[Camera] trackBodyName: body "${config.trackBodyName}" not found.`);
+      }
+    }
+
+    // Set up fixed MuJoCo camera (disables free orbit)
+    if (config.mujocoCamera && this.mjModel) {
+      for (let c = 0; c < this.mjModel.ncam; c++) {
+        if (this.mjModel.cam(c).name === config.mujocoCamera) {
+          this.mujocoFixedCamIndex = c;
+          this.controls.enabled = false;
+          break;
+        }
+      }
+      if (this.mujocoFixedCamIndex === null) {
+        console.warn(`[Camera] mujocoCamera: camera "${config.mujocoCamera}" not found.`);
+      }
+    }
+  }
+
+  /**
+   * Update the Three.js camera each frame for body tracking or fixed MuJoCo cameras.
+   * Must be called before controls.update().
+   */
+  private updateCameraTracking(): void {
+    if (!this.mjData) return;
+
+    if (this.mujocoFixedCamIndex !== null) {
+      // Fixed MuJoCo camera: read world position and orientation from mjData.
+      // cam_xpos: ncam×3 world positions.
+      // cam_xmat: ncam×9 row-major rotation matrices (camera-to-world).
+      //   Column 2 = camera Z axis in world frame; camera looks along -Z.
+      const ci = this.mujocoFixedCamIndex;
+      const pos = mjcToThreeCoordinate(this.mjData.cam_xpos.slice(ci * 3, ci * 3 + 3));
+      this.camera.position.copy(pos);
+
+      const m = this.mjData.cam_xmat.slice(ci * 9, ci * 9 + 9);
+      // Camera -Z axis (viewing direction) in MuJoCo world frame:
+      const lookDirMJ = [-m[2], -m[5], -m[8]] as [number, number, number];
+      const lookTarget = pos.clone().add(mjcToThreeCoordinate(lookDirMJ));
+      this.camera.lookAt(lookTarget);
+    } else if (this.cameraTrackBodyId !== null) {
+      // Body tracking: shift the orbit controls target to the body's world position.
+      // The user can still orbit/zoom around the tracked body.
+      const b = this.cameraTrackBodyId;
+      const bodyPos = mjcToThreeCoordinate(this.mjData.xpos.slice(b * 3, b * 3 + 3));
+      this.controls.target.copy(bodyPos);
+    }
+  }
+
   private render = (): void => {
+    this.updateCameraTracking();
     this.controls.update();
 
     if (this.mjModel && this.mjData && this.bodies) {

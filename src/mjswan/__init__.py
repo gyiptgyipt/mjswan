@@ -18,7 +18,7 @@ from .command import (
 )
 from .policy import PolicyConfig, PolicyHandle
 from .project import ProjectConfig, ProjectHandle
-from .scene import SceneConfig, SceneHandle
+from .scene import CameraConfig, SceneConfig, SceneHandle
 from .splat import SplatConfig, SplatHandle
 
 __all__ = [
@@ -33,6 +33,7 @@ __all__ = [
     # Configs
     "ProjectConfig",
     "SceneConfig",
+    "CameraConfig",
     "SplatConfig",
     "PolicyConfig",
     # Commands
