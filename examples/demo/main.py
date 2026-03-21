@@ -103,7 +103,7 @@ def setup_builder() -> mjswan.Builder:
         spec=mujoco.MjSpec.from_file("assets/unitree_g1/scene.xml"),
         name="G1",
     ).set_camera(
-        position=(3.0, -2.0, 3.5),
+        position=(3.0, -2.0, 3.0),
         target=(0.0, 0.0, 0.7),
         track_body_name="torso_link",
     )
@@ -267,21 +267,55 @@ def setup_builder() -> mjswan.Builder:
 
     registry_specs = gym_registry_specs()
 
-    target_env_name_map = {
-        "myoChallengeDieReorientP2-v0": "mc22 Die Reorient",
-        "myoChallengeBaodingP2-v1": "mc22 Baoding",
-        "myoChallengeRelocateP2-v0": "mc23 Relocate",
-        "myoChallengeChaseTagP2-v0": "mc23 Chase Tag",
-        "myoChallengeBimanual-v0": "mc24 Bimanual",
-        "myoChallengeOslRunRandom-v0": "mc24 OSL Run",
-        "myoChallengeTableTennisP2-v0": "mc25 Table Tennis",
-        "myoChallengeSoccerP2-v0": "mc25 Soccer",
+    target_envs = {
+        "myoChallengeDieReorientP2-v0": (
+            "mc22 Die Reorient",
+            (0.5, -1.6, 1.6),
+            (-0.1, -0.5, 1.4),
+        ),
+        "myoChallengeBaodingP2-v1": (
+            "mc22 Baoding",
+            (0.5, -1.6, 1.6),
+            (-0.1, -0.5, 1.4),
+        ),
+        "myoChallengeRelocateP2-v0": (
+            "mc23 Relocate",
+            (0.0, -1.8, 1.6),
+            (0, -0.1, 1.4),
+        ),
+        "myoChallengeChaseTagP2-v0": (
+            "mc23 Chase Tag",
+            (4.5, -8.5, 4.0),
+            (0, 0, 1.4),
+        ),
+        "myoChallengeBimanual-v0": (
+            "mc24 Bimanual",
+            (0.5, -1.6, 1.6),
+            (0, -0.1, 1.4),
+        ),
+        "myoChallengeOslRunRandom-v0": (
+            "mc24 OSL Run",
+            (4.5, -8.5, 4.0),
+            (0, 0, 1.4),
+        ),
+        "myoChallengeTableTennisP2-v0": (
+            "mc25 Table Tennis",
+            (-2.0, -3.5, 2.0),
+            (0, -1.0, 1.4),
+        ),
+        "myoChallengeSoccerP2-v0": (
+            "mc25 Soccer",
+            (-14, -5, 6),
+            (0, -3, 2),
+        ),
     }
 
-    for env_name, display_name in target_env_name_map.items():
+    for env_name, (display_name, position, target) in target_envs.items():
         model_path = registry_specs[env_name].kwargs["model_path"]
         mjspec = mujoco.MjSpec.from_file(model_path)
-        myosuite_project.add_scene(name=display_name, spec=mjspec)
+        myosuite_project.add_scene(name=display_name, spec=mjspec).set_camera(
+            position=position, target=target
+        )
 
     return builder
 
