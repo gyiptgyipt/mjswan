@@ -72,6 +72,16 @@ export default defineConfig({
     chunkSizeWarningLimit: 11000,
     rollupOptions: {
       input: path.resolve(__dirname, 'index.html'),
+      onwarn(warning, warn) {
+        // mujoco.js is an Emscripten-generated file that imports Node.js built-ins
+        // (module, worker_threads) behind runtime environment checks that are never
+        // reached in the browser.  Suppress the harmless externalization warnings.
+        if (
+          warning.message.includes('@mujoco/mujoco') &&
+          warning.message.includes('externalized for browser compatibility')
+        ) return;
+        warn(warning);
+      },
     },
   },
   worker: {
