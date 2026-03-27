@@ -14,6 +14,7 @@ import onnx
 from .command import CommandGroupConfig, CommandInput, velocity_command
 
 if TYPE_CHECKING:
+    from .managers.observation_manager import ObservationGroupCfg
     from .scene import SceneHandle
 
 
@@ -38,6 +39,14 @@ class PolicyConfig:
 
     commands: dict[str, CommandGroupConfig] = field(default_factory=dict)
     """Command groups for user-controlled inputs."""
+
+    observations: dict[str, ObservationGroupCfg] | None = None
+    """Observation group configurations (mjlab-compatible).
+
+    Keys are group names (e.g. ``"policy"``, ``"critic"``).  Values are
+    ``ObservationGroupCfg`` instances whose terms are serialized into
+    ``obs_config`` in the policy JSON at build time.
+    """
 
 
 class PolicyHandle:

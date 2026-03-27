@@ -17,6 +17,7 @@ from .splat import SplatConfig, SplatHandle
 from .viewer_config import ViewerConfig
 
 if TYPE_CHECKING:
+    from .managers.observation_manager import ObservationGroupCfg
     from .project import ProjectHandle
 
 
@@ -78,6 +79,7 @@ class SceneHandle:
         metadata: dict[str, Any] | None = None,
         source_path: str | None = None,
         config_path: str | None = None,
+        observations: dict[str, ObservationGroupCfg] | None = None,
     ) -> PolicyHandle:
         """Add an ONNX policy to this scene.
 
@@ -87,15 +89,36 @@ class SceneHandle:
             metadata: Optional metadata dictionary for the policy.
             source_path: Optional source path for the policy ONNX file.
             config_path: Optional source path for the policy config JSON file.
+            observations: Observation group configurations (mjlab-compatible).
+                Keys are group names (e.g. ``"policy"``); values are
+                :class:`ObservationGroupCfg` instances.
 
         Returns:
             PolicyHandle for configuring the policy (adding commands, etc.)
 
         Example:
+            from mjswan.managers.observation_manager import (
+                ObservationGroupCfg,
+                ObservationTermCfg,
+            )
+            from mjswan.envs.mdp import observations as obs_fns
+
             policy = scene.add_policy(
                 policy=onnx.load("locomotion.onnx"),
                 name="Locomotion",
                 config_path="locomotion.json",
+                observations={
+                    "policy": ObservationGroupCfg(
+                        terms={
+                            "base_lin_vel": ObservationTermCfg(
+                                func=obs_fns.base_lin_vel
+                            ),
+                            "joint_pos": ObservationTermCfg(
+                                func=obs_fns.joint_pos_rel, scale=0.5
+                            ),
+                        },
+                    ),
+                },
             )
             policy.add_velocity_command()
         """
@@ -108,6 +131,7 @@ class SceneHandle:
             metadata=metadata,
             source_path=source_path,
             config_path=config_path,
+            observations=observations,
         )
         self._config.policies.append(policy_config)
         return PolicyHandle(policy_config, self)
