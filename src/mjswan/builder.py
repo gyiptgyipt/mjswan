@@ -213,6 +213,7 @@ class Builder:
                                             }
                                             if getattr(policy, "config_path", None)
                                             or getattr(policy, "commands", None)
+                                            or getattr(policy, "observations", None)
                                             else {}
                                         ),
                                         **(
@@ -443,6 +444,17 @@ class Builder:
                                             name: cmd.to_dict()
                                             for name, cmd in policy.commands.items()
                                         }
+                                    # Merge observation groups into obs_config
+                                    if policy.observations:
+                                        obs_config = data.get("obs_config", {})
+                                        for key, group in policy.observations.items():
+                                            # Avoid overwriting existing groups
+                                            # (e.g. ONNX "policy" group from config_path)
+                                            target_key = key
+                                            if target_key in obs_config:
+                                                target_key = f"{key}_monitor"
+                                            obs_config[target_key] = group.to_list()
+                                        data["obs_config"] = obs_config
                                     with open(target, "w") as f:
                                         json.dump(data, f, indent=2)
                                 except Exception:
@@ -453,16 +465,22 @@ class Builder:
                                     category=RuntimeWarning,
                                     stacklevel=2,
                                 )
-                        elif policy.commands:
-                            # No config_path but commands defined - create config with commands only
+                        elif policy.commands or policy.observations:
+                            # No config_path but commands/observations defined
                             target = policy_path.with_suffix(".json")
-                            data = {
+                            data: dict = {
                                 "onnx": {"path": policy_path.name},
-                                "commands": {
+                            }
+                            if policy.commands:
+                                data["commands"] = {
                                     name: cmd.to_dict()
                                     for name, cmd in policy.commands.items()
-                                },
-                            }
+                                }
+                            if policy.observations:
+                                data["obs_config"] = {
+                                    key: group.to_list()
+                                    for key, group in policy.observations.items()
+                                }
                             with open(target, "w") as f:
                                 json.dump(data, f, indent=2)
 

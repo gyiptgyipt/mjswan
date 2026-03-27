@@ -16,6 +16,7 @@ from .command import (
     SliderConfig,
     velocity_command,
 )
+from .managers.observation_manager import ObservationGroupCfg, ObservationTermCfg
 from .policy import PolicyConfig, PolicyHandle
 from .project import ProjectConfig, ProjectHandle
 from .scene import SceneConfig, SceneHandle
@@ -37,6 +38,9 @@ __all__ = [
     "ViewerConfig",
     "SplatConfig",
     "PolicyConfig",
+    # MDP observation config (mjlab-compatible)
+    "ObservationGroupCfg",
+    "ObservationTermCfg",
     # Commands
     "Slider",
     "SliderConfig",
