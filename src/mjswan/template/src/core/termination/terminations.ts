@@ -16,7 +16,7 @@ export class TimeOut extends TerminationBase {
     this.maxSteps = (params.max_episode_length as number) ?? 1000;
   }
 
-  evaluate(_state: PolicyState): boolean {
+  evaluate(): boolean {
     this.stepCount++;
     return this.stepCount >= this.maxSteps;
   }
@@ -52,9 +52,11 @@ export class BadOrientation extends TerminationBase {
     // gz = 2*(x*z - w*y)  [for gravity pointing down in world frame]
     // The angle from upright = acos(-gz) where gz is the z-component
     // of the unit gravity vector projected into body frame.
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const w = rootQuat[0];
     const x = rootQuat[1];
     const y = rootQuat[2];
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const z = rootQuat[3];
 
     // Body-frame gravity z-component (assuming world gravity = [0, 0, -1])
