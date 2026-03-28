@@ -26,6 +26,10 @@ from robot_descriptions._descriptions import DESCRIPTIONS  # noqa: E402
 
 import mjswan  # noqa: E402
 from mjswan.envs.mdp import observations as obs_fns  # noqa: E402
+from mjswan.envs.mdp.actions import (  # noqa: E402
+    JointEffortActionCfg,
+    JointPositionActionCfg,
+)
 from mjswan.managers.observation_manager import (  # noqa: E402
     ObservationGroupCfg,
     ObservationTermCfg,
@@ -82,6 +86,122 @@ def _fix_unitree_mujoco_macos() -> None:
     )
 
 
+# ---------------------------------------------------------------------------
+# Shared action configurations
+# ---------------------------------------------------------------------------
+
+# G1 humanoid: per-joint action scale, stiffness, damping
+_G1_ACTION_SCALE = [
+    0.5475464629911068,
+    0.35066146637882434,
+    0.5475464629911068,
+    0.35066146637882434,
+    0.43857731392336724,
+    0.43857731392336724,
+    0.5475464629911068,
+    0.35066146637882434,
+    0.5475464629911068,
+    0.35066146637882434,
+    0.43857731392336724,
+    0.43857731392336724,
+    0.5475464629911068,
+    0.43857731392336724,
+    0.43857731392336724,
+    0.43857731392336724,
+    0.43857731392336724,
+    0.43857731392336724,
+    0.43857731392336724,
+    0.43857731392336724,
+    0.07450087032950714,
+    0.07450087032950714,
+    0.43857731392336724,
+    0.43857731392336724,
+    0.43857731392336724,
+    0.43857731392336724,
+    0.43857731392336724,
+    0.07450087032950714,
+    0.07450087032950714,
+]
+_G1_STIFFNESS = [
+    40.17923863450712,
+    99.09842777666111,
+    40.17923863450712,
+    99.09842777666111,
+    28.50124619574858,
+    28.50124619574858,
+    40.17923863450712,
+    99.09842777666111,
+    40.17923863450712,
+    99.09842777666111,
+    28.50124619574858,
+    28.50124619574858,
+    40.17923863450712,
+    28.50124619574858,
+    28.50124619574858,
+    14.25062309787429,
+    14.25062309787429,
+    14.25062309787429,
+    14.25062309787429,
+    14.25062309787429,
+    16.77832748089279,
+    16.77832748089279,
+    14.25062309787429,
+    14.25062309787429,
+    14.25062309787429,
+    14.25062309787429,
+    14.25062309787429,
+    16.77832748089279,
+    16.77832748089279,
+]
+_G1_DAMPING = [
+    2.557889775413375,
+    6.308801853496639,
+    2.557889775413375,
+    6.308801853496639,
+    1.814445686584846,
+    1.814445686584846,
+    2.557889775413375,
+    6.308801853496639,
+    2.557889775413375,
+    6.308801853496639,
+    1.814445686584846,
+    1.814445686584846,
+    2.557889775413375,
+    1.814445686584846,
+    1.814445686584846,
+    0.907222843292423,
+    0.907222843292423,
+    0.907222843292423,
+    0.907222843292423,
+    0.907222843292423,
+    1.06814150219,
+    1.06814150219,
+    0.907222843292423,
+    0.907222843292423,
+    0.907222843292423,
+    0.907222843292423,
+    0.907222843292423,
+    1.06814150219,
+    1.06814150219,
+]
+_G1_ACTIONS = {
+    "joint_pos": JointPositionActionCfg(
+        scale=_G1_ACTION_SCALE,
+        stiffness=_G1_STIFFNESS,
+        damping=_G1_DAMPING,
+    ),
+}
+
+# Go2 quadruped: shared across facet/vanilla/robust
+_GO2_ACTIONS = {
+    "joint_pos": JointPositionActionCfg(
+        scale=0.5,
+        stiffness=25.0,
+        damping=0.5,
+    ),
+}
+
+
 def setup_builder() -> mjswan.Builder:
     """Set up and return the builder with all demo projects configured.
 
@@ -129,6 +249,7 @@ def setup_builder() -> mjswan.Builder:
         policy=onnx.load("assets/unitree_g1/locomotion.onnx"),
         name="Locomotion",
         config_path="assets/unitree_g1/locomotion.json",
+        actions=_G1_ACTIONS,
         observations={
             "policy": ObservationGroupCfg(
                 terms={
@@ -159,6 +280,7 @@ def setup_builder() -> mjswan.Builder:
         policy=onnx.load("assets/unitree_g1/balance.onnx"),
         name="Balance",
         config_path="assets/unitree_g1/balance.json",
+        actions=_G1_ACTIONS,
         observations={
             "observation": ObservationGroupCfg(
                 terms={
@@ -202,6 +324,7 @@ def setup_builder() -> mjswan.Builder:
         policy=onnx.load("assets/unitree_go2/facet.onnx"),
         name="Facet",
         config_path="assets/unitree_go2/facet.json",
+        actions=_GO2_ACTIONS,
         observations={
             "policy": ObservationGroupCfg(
                 terms={
@@ -266,12 +389,14 @@ def setup_builder() -> mjswan.Builder:
         policy=onnx.load("assets/unitree_go2/vanilla.onnx"),
         name="Vanilla",
         config_path="assets/unitree_go2/vanilla.json",
+        actions=_GO2_ACTIONS,
         observations=_go2_velocity_obs,
     ).add_velocity_command()
     go2_scene.add_policy(
         policy=onnx.load("assets/unitree_go2/robust.onnx"),
         name="Robust",
         config_path="assets/unitree_go2/robust.json",
+        actions=_GO2_ACTIONS,
         observations=_go2_velocity_obs,
     ).add_velocity_command()
 
@@ -290,16 +415,32 @@ def setup_builder() -> mjswan.Builder:
         )
     )
     # NOTE: himloco uses an interleaved history format (dict with "interleaved": true)
-    # that is not yet expressible via ObservationGroupCfg. obs_config remains in himloco.json.
+    # that is not yet expressible via ObservationGroupCfg. observations remains in himloco.json.
+    _go1_himloco_actions = {
+        "joint_pos": JointPositionActionCfg(
+            scale=0.25,
+            stiffness=40.0,
+            damping=1.0,
+        ),
+    }
     go1_scene.add_policy(
         policy=onnx.load("assets/unitree_go1/himloco.onnx"),
         name="HiMLoco",
         config_path="assets/unitree_go1/himloco.json",
+        actions=_go1_himloco_actions,
     ).add_velocity_command()
+    _go1_decap_actions = {
+        "effort": JointEffortActionCfg(
+            scale=8.0,
+            stiffness=20.0,
+            damping=0.5,
+        ),
+    }
     go1_scene.add_policy(
         policy=onnx.load("assets/unitree_go1/decap.onnx"),
         name="Decap",
         config_path="assets/unitree_go1/decap.json",
+        actions=_go1_decap_actions,
         observations={
             "obs_history": ObservationGroupCfg(
                 terms={
@@ -336,12 +477,20 @@ def setup_builder() -> mjswan.Builder:
         name="ANYmal C Velocity",
         spec=mujoco.MjSpec.from_zip("assets/anymal_c_velocity/scene.mjz"),
     )
+    _anymal_c_actions = {
+        "joint_pos": JointPositionActionCfg(
+            scale=1.013,
+            stiffness=19.739,
+            damping=1.257,
+        ),
+    }
     anymal_c_scene.add_policy(
         name="velocity 3000 iters",
         policy=onnx.load(
             "assets/anymal_c_velocity/Mjlab-Velocity-Flat-Anymal-C.3000.onnx"
         ),
         config_path="assets/anymal_c_velocity/Mjlab-Velocity-Flat-Anymal-C.3000.json",
+        actions=_anymal_c_actions,
         observations={
             "obs": ObservationGroupCfg(
                 terms={

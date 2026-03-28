@@ -31,9 +31,11 @@ export type ObservationGroupConfig =
 
 export type ActionConfigEntry = {
   type: string;
-  scale?: number | Record<string, number>;
+  scale?: number | number[] | Record<string, number>;
   offset?: number | Record<string, number>;
   use_default_offset?: boolean;
+  stiffness?: number | number[];
+  damping?: number | number[];
   [key: string]: unknown;
 };
 

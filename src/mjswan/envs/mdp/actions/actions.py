@@ -86,10 +86,23 @@ class JointPositionActionCfg(BaseActionCfg):
     """Configuration for joint position control.
 
     Mirrors ``mjlab.envs.mdp.actions.actions.JointPositionActionCfg``.
+
+    ``stiffness`` and ``damping`` are mjswan-specific fields for PD control
+    in the browser runtime.  In mjlab these are actuator model properties,
+    but mjswan needs them in the policy config because the TS runtime
+    computes PD externally for motor actuators (biastype=none).
     """
 
     use_default_offset: bool = True
     """When True, action=0 commands the default joint pose."""
+
+    stiffness: float | list[float] | None = None
+    """Position gain (kp) for PD control.  Scalar or per-joint list.
+    Only used by the TS runtime for motor actuators with external PD."""
+
+    damping: float | list[float] | None = None
+    """Velocity gain (kd) for PD control.  Scalar or per-joint list.
+    Only used by the TS runtime for motor actuators with external PD."""
 
     def to_dict(self) -> dict[str, Any]:
         if self.unsupported_reason is not None:
@@ -99,6 +112,10 @@ class JointPositionActionCfg(BaseActionCfg):
         if self.scale != 1.0:
             entry["scale"] = self.scale
         entry["use_default_offset"] = self.use_default_offset
+        if self.stiffness is not None:
+            entry["stiffness"] = self.stiffness
+        if self.damping is not None:
+            entry["damping"] = self.damping
         return entry
 
 
@@ -132,6 +149,12 @@ class JointEffortActionCfg(BaseActionCfg):
     Mirrors ``mjlab.envs.mdp.actions.actions.JointEffortActionCfg``.
     """
 
+    stiffness: float | list[float] | None = None
+    """Position gain (kp).  mjswan-specific; see ``JointPositionActionCfg``."""
+
+    damping: float | list[float] | None = None
+    """Velocity gain (kd).  mjswan-specific; see ``JointPositionActionCfg``."""
+
     def to_dict(self) -> dict[str, Any]:
         if self.unsupported_reason is not None:
             raise NotImplementedError(self.unsupported_reason)
@@ -139,6 +162,10 @@ class JointEffortActionCfg(BaseActionCfg):
         entry: dict[str, Any] = {"type": "torque"}
         if self.scale != 1.0:
             entry["scale"] = self.scale
+        if self.stiffness is not None:
+            entry["stiffness"] = self.stiffness
+        if self.damping is not None:
+            entry["damping"] = self.damping
         return entry
 
 

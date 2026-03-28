@@ -659,21 +659,23 @@ export class mjswanRuntime {
       kd: Float32Array;
     }
     | null {
-    // Resolve control type and action scale from new `actions` config
-    // or fall back to legacy flat fields for compatibility.
+    // Resolve control type, action scale, stiffness, and damping from the
+    // `actions` config block.  Falls back to legacy flat fields when the
+    // new block is absent.
     let controlType: string;
     let configScale: number[] | number | undefined;
+    let configStiffness: number[] | number | undefined;
+    let configDamping: number[] | number | undefined;
     let useDefaultOffset = true;
 
     const actionsConfig = config.actions;
     if (actionsConfig) {
-      // Use the first action term to determine control type
       const firstTerm = Object.values(actionsConfig)[0];
       if (firstTerm) {
         controlType = firstTerm.type ?? 'joint_position';
-        if (typeof firstTerm.scale === 'number') {
-          configScale = firstTerm.scale;
-        }
+        configScale = firstTerm.scale as number[] | number | undefined;
+        configStiffness = firstTerm.stiffness as number[] | number | undefined;
+        configDamping = firstTerm.damping as number[] | number | undefined;
         if (firstTerm.use_default_offset !== undefined) {
           useDefaultOffset = firstTerm.use_default_offset;
         }
@@ -683,6 +685,8 @@ export class mjswanRuntime {
     } else {
       controlType = config.control_type ?? 'joint_position';
       configScale = config.action_scale;
+      configStiffness = config.stiffness;
+      configDamping = config.damping;
     }
 
     if (controlType !== 'joint_position' && controlType !== 'torque') {
@@ -697,12 +701,12 @@ export class mjswanRuntime {
     }
 
     const numActions = mapping.qposAdr.length;
-    const actionScale = this.normalizeControlArray(configScale ?? config.action_scale, numActions, 1.0);
+    const actionScale = this.normalizeControlArray(configScale, numActions, 1.0);
     const defaultJointPos = useDefaultOffset
       ? runner.getDefaultJointPos()
       : new Float32Array(numActions);
-    const kp = this.normalizeControlArray(config.stiffness, numActions, 0.0);
-    const kd = this.normalizeControlArray(config.damping, numActions, 0.0);
+    const kp = this.normalizeControlArray(configStiffness, numActions, 0.0);
+    const kd = this.normalizeControlArray(configDamping, numActions, 0.0);
 
     // Detect per-actuator whether the scene uses position actuators (biastype=affine,
     // ctrl=target_pos, PD handled internally by MuJoCo) or motor actuators
