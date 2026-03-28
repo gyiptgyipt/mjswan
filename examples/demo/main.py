@@ -26,6 +26,7 @@ from robot_descriptions._descriptions import DESCRIPTIONS  # noqa: E402
 
 import mjswan  # noqa: E402
 from mjswan.envs.mdp import observations as obs_fns  # noqa: E402
+from mjswan.envs.mdp import terminations as term_fns  # noqa: E402
 from mjswan.envs.mdp.actions import (  # noqa: E402
     JointEffortActionCfg,
     JointPositionActionCfg,
@@ -34,6 +35,7 @@ from mjswan.managers.observation_manager import (  # noqa: E402
     ObservationGroupCfg,
     ObservationTermCfg,
 )
+from mjswan.managers.termination_manager import TerminationTermCfg  # noqa: E402
 
 
 def _fix_unitree_mujoco_macos() -> None:
@@ -86,117 +88,101 @@ def _fix_unitree_mujoco_macos() -> None:
     )
 
 
-# ---------------------------------------------------------------------------
-# Shared action configurations
-# ---------------------------------------------------------------------------
-
-# G1 humanoid: per-joint action scale, stiffness, damping (keyed by joint name)
-_G1_ACTIONS = {
-    "joint_pos": JointPositionActionCfg(
-        scale={
-            "left_hip_pitch_joint": 0.5475464629911068,
-            "left_hip_roll_joint": 0.35066146637882434,
-            "left_hip_yaw_joint": 0.5475464629911068,
-            "left_knee_joint": 0.35066146637882434,
-            "left_ankle_pitch_joint": 0.43857731392336724,
-            "left_ankle_roll_joint": 0.43857731392336724,
-            "right_hip_pitch_joint": 0.5475464629911068,
-            "right_hip_roll_joint": 0.35066146637882434,
-            "right_hip_yaw_joint": 0.5475464629911068,
-            "right_knee_joint": 0.35066146637882434,
-            "right_ankle_pitch_joint": 0.43857731392336724,
-            "right_ankle_roll_joint": 0.43857731392336724,
-            "waist_yaw_joint": 0.5475464629911068,
-            "waist_roll_joint": 0.43857731392336724,
-            "waist_pitch_joint": 0.43857731392336724,
-            "left_shoulder_pitch_joint": 0.43857731392336724,
-            "left_shoulder_roll_joint": 0.43857731392336724,
-            "left_shoulder_yaw_joint": 0.43857731392336724,
-            "left_elbow_joint": 0.43857731392336724,
-            "left_wrist_roll_joint": 0.43857731392336724,
-            "left_wrist_pitch_joint": 0.07450087032950714,
-            "left_wrist_yaw_joint": 0.07450087032950714,
-            "right_shoulder_pitch_joint": 0.43857731392336724,
-            "right_shoulder_roll_joint": 0.43857731392336724,
-            "right_shoulder_yaw_joint": 0.43857731392336724,
-            "right_elbow_joint": 0.43857731392336724,
-            "right_wrist_roll_joint": 0.43857731392336724,
-            "right_wrist_pitch_joint": 0.07450087032950714,
-            "right_wrist_yaw_joint": 0.07450087032950714,
-        },
-        stiffness={
-            "left_hip_pitch_joint": 40.17923863450712,
-            "left_hip_roll_joint": 99.09842777666111,
-            "left_hip_yaw_joint": 40.17923863450712,
-            "left_knee_joint": 99.09842777666111,
-            "left_ankle_pitch_joint": 28.50124619574858,
-            "left_ankle_roll_joint": 28.50124619574858,
-            "right_hip_pitch_joint": 40.17923863450712,
-            "right_hip_roll_joint": 99.09842777666111,
-            "right_hip_yaw_joint": 40.17923863450712,
-            "right_knee_joint": 99.09842777666111,
-            "right_ankle_pitch_joint": 28.50124619574858,
-            "right_ankle_roll_joint": 28.50124619574858,
-            "waist_yaw_joint": 40.17923863450712,
-            "waist_roll_joint": 28.50124619574858,
-            "waist_pitch_joint": 28.50124619574858,
-            "left_shoulder_pitch_joint": 14.25062309787429,
-            "left_shoulder_roll_joint": 14.25062309787429,
-            "left_shoulder_yaw_joint": 14.25062309787429,
-            "left_elbow_joint": 14.25062309787429,
-            "left_wrist_roll_joint": 14.25062309787429,
-            "left_wrist_pitch_joint": 16.77832748089279,
-            "left_wrist_yaw_joint": 16.77832748089279,
-            "right_shoulder_pitch_joint": 14.25062309787429,
-            "right_shoulder_roll_joint": 14.25062309787429,
-            "right_shoulder_yaw_joint": 14.25062309787429,
-            "right_elbow_joint": 14.25062309787429,
-            "right_wrist_roll_joint": 14.25062309787429,
-            "right_wrist_pitch_joint": 16.77832748089279,
-            "right_wrist_yaw_joint": 16.77832748089279,
-        },
-        damping={
-            "left_hip_pitch_joint": 2.557889775413375,
-            "left_hip_roll_joint": 6.308801853496639,
-            "left_hip_yaw_joint": 2.557889775413375,
-            "left_knee_joint": 6.308801853496639,
-            "left_ankle_pitch_joint": 1.814445686584846,
-            "left_ankle_roll_joint": 1.814445686584846,
-            "right_hip_pitch_joint": 2.557889775413375,
-            "right_hip_roll_joint": 6.308801853496639,
-            "right_hip_yaw_joint": 2.557889775413375,
-            "right_knee_joint": 6.308801853496639,
-            "right_ankle_pitch_joint": 1.814445686584846,
-            "right_ankle_roll_joint": 1.814445686584846,
-            "waist_yaw_joint": 2.557889775413375,
-            "waist_roll_joint": 1.814445686584846,
-            "waist_pitch_joint": 1.814445686584846,
-            "left_shoulder_pitch_joint": 0.907222843292423,
-            "left_shoulder_roll_joint": 0.907222843292423,
-            "left_shoulder_yaw_joint": 0.907222843292423,
-            "left_elbow_joint": 0.907222843292423,
-            "left_wrist_roll_joint": 0.907222843292423,
-            "left_wrist_pitch_joint": 1.06814150219,
-            "left_wrist_yaw_joint": 1.06814150219,
-            "right_shoulder_pitch_joint": 0.907222843292423,
-            "right_shoulder_roll_joint": 0.907222843292423,
-            "right_shoulder_yaw_joint": 0.907222843292423,
-            "right_elbow_joint": 0.907222843292423,
-            "right_wrist_roll_joint": 0.907222843292423,
-            "right_wrist_pitch_joint": 1.06814150219,
-            "right_wrist_yaw_joint": 1.06814150219,
-        },
-    ),
+# fmt: off
+_G1_JOINT_SCALE = {
+    "left_hip_pitch_joint":      0.5475464629911068,
+    "left_hip_roll_joint":       0.35066146637882434,
+    "left_hip_yaw_joint":        0.5475464629911068,
+    "left_knee_joint":           0.35066146637882434,
+    "left_ankle_pitch_joint":    0.43857731392336724,
+    "left_ankle_roll_joint":     0.43857731392336724,
+    "right_hip_pitch_joint":     0.5475464629911068,
+    "right_hip_roll_joint":      0.35066146637882434,
+    "right_hip_yaw_joint":       0.5475464629911068,
+    "right_knee_joint":          0.35066146637882434,
+    "right_ankle_pitch_joint":   0.43857731392336724,
+    "right_ankle_roll_joint":    0.43857731392336724,
+    "waist_yaw_joint":           0.5475464629911068,
+    "waist_roll_joint":          0.43857731392336724,
+    "waist_pitch_joint":         0.43857731392336724,
+    "left_shoulder_pitch_joint": 0.43857731392336724,
+    "left_shoulder_roll_joint":  0.43857731392336724,
+    "left_shoulder_yaw_joint":   0.43857731392336724,
+    "left_elbow_joint":          0.43857731392336724,
+    "left_wrist_roll_joint":     0.43857731392336724,
+    "left_wrist_pitch_joint":    0.07450087032950714,
+    "left_wrist_yaw_joint":      0.07450087032950714,
+    "right_shoulder_pitch_joint": 0.43857731392336724,
+    "right_shoulder_roll_joint": 0.43857731392336724,
+    "right_shoulder_yaw_joint":  0.43857731392336724,
+    "right_elbow_joint":         0.43857731392336724,
+    "right_wrist_roll_joint":    0.43857731392336724,
+    "right_wrist_pitch_joint":   0.07450087032950714,
+    "right_wrist_yaw_joint":     0.07450087032950714,
 }
-
-# Go2 quadruped: shared across facet/vanilla/robust
-_GO2_ACTIONS = {
-    "joint_pos": JointPositionActionCfg(
-        scale=0.5,
-        stiffness=25.0,
-        damping=0.5,
-    ),
+_G1_JOINT_STIFFNESS = {
+    "left_hip_pitch_joint":      40.17923863450712,
+    "left_hip_roll_joint":       99.09842777666111,
+    "left_hip_yaw_joint":        40.17923863450712,
+    "left_knee_joint":           99.09842777666111,
+    "left_ankle_pitch_joint":    28.50124619574858,
+    "left_ankle_roll_joint":     28.50124619574858,
+    "right_hip_pitch_joint":     40.17923863450712,
+    "right_hip_roll_joint":      99.09842777666111,
+    "right_hip_yaw_joint":       40.17923863450712,
+    "right_knee_joint":          99.09842777666111,
+    "right_ankle_pitch_joint":   28.50124619574858,
+    "right_ankle_roll_joint":    28.50124619574858,
+    "waist_yaw_joint":           40.17923863450712,
+    "waist_roll_joint":          28.50124619574858,
+    "waist_pitch_joint":         28.50124619574858,
+    "left_shoulder_pitch_joint": 14.25062309787429,
+    "left_shoulder_roll_joint":  14.25062309787429,
+    "left_shoulder_yaw_joint":   14.25062309787429,
+    "left_elbow_joint":          14.25062309787429,
+    "left_wrist_roll_joint":     14.25062309787429,
+    "left_wrist_pitch_joint":    16.77832748089279,
+    "left_wrist_yaw_joint":      16.77832748089279,
+    "right_shoulder_pitch_joint": 14.25062309787429,
+    "right_shoulder_roll_joint": 14.25062309787429,
+    "right_shoulder_yaw_joint":  14.25062309787429,
+    "right_elbow_joint":         14.25062309787429,
+    "right_wrist_roll_joint":    14.25062309787429,
+    "right_wrist_pitch_joint":   16.77832748089279,
+    "right_wrist_yaw_joint":     16.77832748089279,
 }
+_G1_JOINT_DAMPING = {
+    "left_hip_pitch_joint":      2.557889775413375,
+    "left_hip_roll_joint":       6.308801853496639,
+    "left_hip_yaw_joint":        2.557889775413375,
+    "left_knee_joint":           6.308801853496639,
+    "left_ankle_pitch_joint":    1.814445686584846,
+    "left_ankle_roll_joint":     1.814445686584846,
+    "right_hip_pitch_joint":     2.557889775413375,
+    "right_hip_roll_joint":      6.308801853496639,
+    "right_hip_yaw_joint":       2.557889775413375,
+    "right_knee_joint":          6.308801853496639,
+    "right_ankle_pitch_joint":   1.814445686584846,
+    "right_ankle_roll_joint":    1.814445686584846,
+    "waist_yaw_joint":           2.557889775413375,
+    "waist_roll_joint":          1.814445686584846,
+    "waist_pitch_joint":         1.814445686584846,
+    "left_shoulder_pitch_joint": 0.907222843292423,
+    "left_shoulder_roll_joint":  0.907222843292423,
+    "left_shoulder_yaw_joint":   0.907222843292423,
+    "left_elbow_joint":          0.907222843292423,
+    "left_wrist_roll_joint":     0.907222843292423,
+    "left_wrist_pitch_joint":    1.06814150219,
+    "left_wrist_yaw_joint":      1.06814150219,
+    "right_shoulder_pitch_joint": 0.907222843292423,
+    "right_shoulder_roll_joint": 0.907222843292423,
+    "right_shoulder_yaw_joint":  0.907222843292423,
+    "right_elbow_joint":         0.907222843292423,
+    "right_wrist_roll_joint":    0.907222843292423,
+    "right_wrist_pitch_joint":   1.06814150219,
+    "right_wrist_yaw_joint":     1.06814150219,
+}
+# fmt: on
 
 
 def setup_builder() -> mjswan.Builder:
@@ -246,7 +232,21 @@ def setup_builder() -> mjswan.Builder:
         policy=onnx.load("assets/unitree_g1/locomotion.onnx"),
         name="Locomotion",
         config_path="assets/unitree_g1/locomotion.json",
-        actions=_G1_ACTIONS,
+        actions={
+            "joint_pos": JointPositionActionCfg(
+                scale=_G1_JOINT_SCALE,
+                stiffness=_G1_JOINT_STIFFNESS,
+                damping=_G1_JOINT_DAMPING,
+            ),
+        },
+        terminations={
+            "bad_orientation": TerminationTermCfg(
+                func=term_fns.bad_orientation, params={"limit_angle": 1.0}
+            ),
+            "root_height_below_minimum": TerminationTermCfg(
+                func=term_fns.root_height_below_minimum, params={"minimum_height": 0.3}
+            ),
+        },
         observations={
             "policy": ObservationGroupCfg(
                 terms={
@@ -277,7 +277,21 @@ def setup_builder() -> mjswan.Builder:
         policy=onnx.load("assets/unitree_g1/balance.onnx"),
         name="Balance",
         config_path="assets/unitree_g1/balance.json",
-        actions=_G1_ACTIONS,
+        actions={
+            "joint_pos": JointPositionActionCfg(
+                scale=_G1_JOINT_SCALE,
+                stiffness=_G1_JOINT_STIFFNESS,
+                damping=_G1_JOINT_DAMPING,
+            ),
+        },
+        terminations={
+            "bad_orientation": TerminationTermCfg(
+                func=term_fns.bad_orientation, params={"limit_angle": 1.0}
+            ),
+            "root_height_below_minimum": TerminationTermCfg(
+                func=term_fns.root_height_below_minimum, params={"minimum_height": 0.3}
+            ),
+        },
         observations={
             "observation": ObservationGroupCfg(
                 terms={
@@ -321,7 +335,13 @@ def setup_builder() -> mjswan.Builder:
         name="Facet",
         policy=onnx.load("assets/unitree_go2/facet.onnx"),
         config_path="assets/unitree_go2/facet.json",
-        actions=_GO2_ACTIONS,
+        actions={
+            "joint_pos": JointPositionActionCfg(
+                scale=0.5,
+                stiffness=25.0,
+                damping=0.5,
+            ),
+        },
         observations={
             "policy": ObservationGroupCfg(
                 terms={
@@ -386,14 +406,26 @@ def setup_builder() -> mjswan.Builder:
         policy=onnx.load("assets/unitree_go2/vanilla.onnx"),
         name="Vanilla",
         config_path="assets/unitree_go2/vanilla.json",
-        actions=_GO2_ACTIONS,
+        actions={
+            "joint_pos": JointPositionActionCfg(
+                scale=0.5,
+                stiffness=25.0,
+                damping=0.5,
+            ),
+        },
         observations=_go2_velocity_obs,
     ).add_velocity_command()
     go2_scene.add_policy(
         policy=onnx.load("assets/unitree_go2/robust.onnx"),
         name="Robust",
         config_path="assets/unitree_go2/robust.json",
-        actions=_GO2_ACTIONS,
+        actions={
+            "joint_pos": JointPositionActionCfg(
+                scale=0.5,
+                stiffness=25.0,
+                damping=0.5,
+            ),
+        },
         observations=_go2_velocity_obs,
     ).add_velocity_command()
 
@@ -544,7 +576,8 @@ def setup_builder() -> mjswan.Builder:
             continue
 
         env = registry.load(env_name)
-        xml_content = open(env.xml_path).read()
+        with open(env.xml_path) as f:
+            xml_content = f.read()
         spec = mujoco.MjSpec.from_string(xml_content, env.model_assets)
 
         # model_assets is consumed at parse time but not stored in spec.assets.
