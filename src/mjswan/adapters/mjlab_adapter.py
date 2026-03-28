@@ -29,13 +29,19 @@ from ..envs.mdp import observations as _obs_sentinels
 from ..envs.mdp import terminations as _term_sentinels
 from ..envs.mdp.actions.actions import (
     ActionTermCfg as MjswanActionTermCfg,
+)
+from ..envs.mdp.actions.actions import (
     JointEffortActionCfg as MjswanJointEffortActionCfg,
+)
+from ..envs.mdp.actions.actions import (
     JointPositionActionCfg as MjswanJointPositionActionCfg,
 )
 from ..envs.mdp.observations import ObsFunc
 from ..envs.mdp.terminations import TermFunc
 from ..managers.observation_manager import (
     ObservationGroupCfg as MjswanObservationGroupCfg,
+)
+from ..managers.observation_manager import (
     ObservationTermCfg as MjswanObservationTermCfg,
 )
 from ..managers.termination_manager import (
@@ -220,13 +226,6 @@ def adapt_terminations(
 # ---------------------------------------------------------------------------
 # Action adaptation
 # ---------------------------------------------------------------------------
-
-# mjlab class name → mjswan adapter function
-_ACTION_CLASS_MAP: dict[str, str] = {
-    "JointPositionActionCfg": "joint_position",
-    "JointEffortActionCfg": "joint_effort",
-    "JointVelocityActionCfg": "joint_velocity",
-}
 
 
 def _adapt_action_cfg(term: Any) -> MjswanActionTermCfg:
