@@ -34,8 +34,8 @@ export type ActionConfigEntry = {
   scale?: number | number[] | Record<string, number>;
   offset?: number | Record<string, number>;
   use_default_offset?: boolean;
-  stiffness?: number | number[];
-  damping?: number | number[];
+  stiffness?: number | number[] | Record<string, number>;
+  damping?: number | number[] | Record<string, number>;
   [key: string]: unknown;
 };
 

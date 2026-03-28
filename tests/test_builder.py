@@ -153,7 +153,7 @@ class TestSaveConfigJson:
     ):
         builder = Builder()
         scene = builder.add_project(name="P").add_scene(name="S", model=minimal_model)
-        scene.add_policy(minimal_onnx, name="Policy")
+        scene.add_policy(name="Policy", policy=minimal_onnx)
         builder._save_config_json(tmp_path)
         policy = self._read_config(tmp_path)["projects"][0]["scenes"][0]["policies"][0]
         assert policy["name"] == "Policy"

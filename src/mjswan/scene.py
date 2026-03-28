@@ -6,6 +6,7 @@ managing MuJoCo scenes and their associated policies.
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
@@ -75,14 +76,14 @@ class SceneHandle:
 
     def add_policy(
         self,
-        policy: onnx.ModelProto,
         name: str,
+        policy: onnx.ModelProto,
         *,
         metadata: dict[str, Any] | None = None,
         source_path: str | None = None,
         config_path: str | None = None,
         observations: dict[str, ObservationGroupCfg] | None = None,
-        actions: dict[str, ActionTermCfg] | None = None,
+        actions: Mapping[str, ActionTermCfg] | None = None,
         terminations: dict[str, TerminationTermCfg] | None = None,
     ) -> PolicyHandle:
         """Add an ONNX policy to this scene.

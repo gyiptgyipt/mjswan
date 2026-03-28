@@ -60,10 +60,10 @@ class BaseActionCfg(ActionTermCfg):
     actuator_names: tuple[str, ...] | list[str] = (".*",)
     """Actuator names (regex patterns) to control."""
 
-    scale: float | dict[str, float] = 1.0
+    scale: float | list[float] | dict[str, float] = 1.0
     """Action scale applied to raw policy output."""
 
-    offset: float | dict[str, float] = 0.0
+    offset: float | list[float] | dict[str, float] = 0.0
     """Action offset added after scaling."""
 
     preserve_order: bool = False
@@ -96,12 +96,14 @@ class JointPositionActionCfg(BaseActionCfg):
     use_default_offset: bool = True
     """When True, action=0 commands the default joint pose."""
 
-    stiffness: float | list[float] | None = None
-    """Position gain (kp) for PD control.  Scalar or per-joint list.
+    stiffness: float | list[float] | dict[str, float] | None = None
+    """Position gain (kp) for PD control.  Scalar, per-joint list, or dict
+    mapping joint names (must match ``policy_joint_names``) to values.
     Only used by the TS runtime for motor actuators with external PD."""
 
-    damping: float | list[float] | None = None
-    """Velocity gain (kd) for PD control.  Scalar or per-joint list.
+    damping: float | list[float] | dict[str, float] | None = None
+    """Velocity gain (kd) for PD control.  Scalar, per-joint list, or dict
+    mapping joint names (must match ``policy_joint_names``) to values.
     Only used by the TS runtime for motor actuators with external PD."""
 
     def to_dict(self) -> dict[str, Any]:
@@ -149,10 +151,10 @@ class JointEffortActionCfg(BaseActionCfg):
     Mirrors ``mjlab.envs.mdp.actions.actions.JointEffortActionCfg``.
     """
 
-    stiffness: float | list[float] | None = None
+    stiffness: float | list[float] | dict[str, float] | None = None
     """Position gain (kp).  mjswan-specific; see ``JointPositionActionCfg``."""
 
-    damping: float | list[float] | None = None
+    damping: float | list[float] | dict[str, float] | None = None
     """Velocity gain (kd).  mjswan-specific; see ``JointPositionActionCfg``."""
 
     def to_dict(self) -> dict[str, Any]:

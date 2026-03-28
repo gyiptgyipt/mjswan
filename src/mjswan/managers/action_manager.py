@@ -19,12 +19,13 @@ Example::
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from typing import Any
 
 from ..envs.mdp.actions.actions import ActionTermCfg
 
 
-def serialize_actions(actions: dict[str, ActionTermCfg]) -> dict[str, Any]:
+def serialize_actions(actions: Mapping[str, ActionTermCfg]) -> dict[str, Any]:
     """Serialize a dict of action term configs to JSON-compatible format.
 
     Returns a dict keyed by term name, each value being the term's

@@ -663,9 +663,9 @@ export class mjswanRuntime {
     // `actions` config block.  Falls back to legacy flat fields when the
     // new block is absent.
     let controlType: string;
-    let configScale: number[] | number | undefined;
-    let configStiffness: number[] | number | undefined;
-    let configDamping: number[] | number | undefined;
+    let configScale: number[] | number | Record<string, number> | undefined;
+    let configStiffness: number[] | number | Record<string, number> | undefined;
+    let configDamping: number[] | number | Record<string, number> | undefined;
     let useDefaultOffset = true;
 
     const actionsConfig = config.actions;
@@ -673,9 +673,9 @@ export class mjswanRuntime {
       const firstTerm = Object.values(actionsConfig)[0];
       if (firstTerm) {
         controlType = firstTerm.type ?? 'joint_position';
-        configScale = firstTerm.scale as number[] | number | undefined;
-        configStiffness = firstTerm.stiffness as number[] | number | undefined;
-        configDamping = firstTerm.damping as number[] | number | undefined;
+        configScale = firstTerm.scale as number[] | number | Record<string, number> | undefined;
+        configStiffness = firstTerm.stiffness as number[] | number | Record<string, number> | undefined;
+        configDamping = firstTerm.damping as number[] | number | Record<string, number> | undefined;
         if (firstTerm.use_default_offset !== undefined) {
           useDefaultOffset = firstTerm.use_default_offset;
         }
@@ -701,12 +701,13 @@ export class mjswanRuntime {
     }
 
     const numActions = mapping.qposAdr.length;
-    const actionScale = this.normalizeControlArray(configScale, numActions, 1.0);
+    const jointNames = runner.getPolicyJointNames();
+    const actionScale = this.normalizeControlArray(configScale, numActions, 1.0, jointNames);
     const defaultJointPos = useDefaultOffset
       ? runner.getDefaultJointPos()
       : new Float32Array(numActions);
-    const kp = this.normalizeControlArray(configStiffness, numActions, 0.0);
-    const kd = this.normalizeControlArray(configDamping, numActions, 0.0);
+    const kp = this.normalizeControlArray(configStiffness, numActions, 0.0, jointNames);
+    const kd = this.normalizeControlArray(configDamping, numActions, 0.0, jointNames);
 
     // Detect per-actuator whether the scene uses position actuators (biastype=affine,
     // ctrl=target_pos, PD handled internally by MuJoCo) or motor actuators
@@ -738,11 +739,13 @@ export class mjswanRuntime {
   }
 
   private normalizeControlArray(
-    values: number[] | number | undefined,
+    values: number[] | number | Record<string, number> | undefined,
     length: number,
-    fallback: number
+    fallback: number,
+    jointNames?: string[]
   ): Float32Array {
     const output = new Float32Array(length);
+    output.fill(fallback);
     if (typeof values === 'number') {
       output.fill(values);
       return output;
@@ -753,7 +756,17 @@ export class mjswanRuntime {
       }
       return output;
     }
-    output.fill(fallback);
+    if (values !== null && typeof values === 'object' && jointNames) {
+      for (const [name, val] of Object.entries(values)) {
+        const idx = jointNames.indexOf(name);
+        if (idx >= 0 && idx < length) {
+          output[idx] = val;
+        } else {
+          console.warn(`[PolicyRunner] Joint name "${name}" not found in policy_joint_names; skipping.`);
+        }
+      }
+      return output;
+    }
     return output;
   }
 

@@ -6,6 +6,7 @@ ONNX policy configuration and command management.
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
@@ -50,7 +51,7 @@ class PolicyConfig:
     ``observations`` in the policy JSON at build time.
     """
 
-    actions: dict[str, ActionTermCfg] | None = None
+    actions: Mapping[str, ActionTermCfg] | None = None
     """Action term configurations (mjlab-compatible).
 
     Keys are term names (e.g. ``"joint_pos"``).  Values are
