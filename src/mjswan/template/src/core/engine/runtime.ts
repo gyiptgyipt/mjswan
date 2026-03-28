@@ -24,6 +24,8 @@ import { SceneCacheManager } from '../cache/sceneCacheManager';
 import { SceneResourceTracker } from '../cache/resourceTracker';
 import { MemoryMonitor } from '../cache/memoryMonitor';
 import { Observations } from '../observation/observations';
+import { TerminationManager } from '../termination/TerminationManager';
+import { Terminations } from '../termination/terminations';
 import * as ort from 'onnxruntime-web';
 import { PolicyRunner } from '../policy/PolicyRunner';
 import { OnnxModule } from '../policy/OnnxModule';
@@ -117,6 +119,7 @@ export class mjswanRuntime {
   private onnxModule: OnnxModule | null;
   private onnxInputDict: Record<string, ort.Tensor> | null;
   private onnxInferencing: boolean;
+  private terminationManager: TerminationManager | null;
   private vrButton: HTMLElement | null;
   private splatMesh: SplatMesh | null;
   private colliderMesh: THREE.Group | null;
@@ -216,6 +219,7 @@ export class mjswanRuntime {
     this.onnxModule = null;
     this.onnxInputDict = null;
     this.onnxInferencing = false;
+    this.terminationManager = null;
     this.splatMesh = null;
     this.colliderMesh = null;
     this.cameraState = { trackBodyId: null, prevBodyPos: null };
@@ -487,6 +491,20 @@ export class mjswanRuntime {
         }
         this.executeSimulationSteps();
         this.updateCachedState();
+
+        // Evaluate termination conditions after simulation step
+        if (this.terminationManager && this.policyStateBuilder) {
+          const postState = this.policyStateBuilder.build();
+          const result = this.terminationManager.evaluate(postState);
+          if (result.done) {
+            this.resetSimulationState();
+            this.terminationManager.reset();
+            if (this.policyRunner) {
+              const resetState = this.policyStateBuilder.build();
+              this.policyRunner.reset(resetState);
+            }
+          }
+        }
       }
 
       const elapsed = (performance.now() - loopStart) / 1000;
@@ -509,6 +527,7 @@ export class mjswanRuntime {
     this.onnxModule = null;
     this.onnxInputDict = null;
     this.onnxInferencing = false;
+    this.terminationManager = null;
 
     // Clear existing commands when switching policies
     const commandManager = getCommandManager();
@@ -565,6 +584,12 @@ export class mjswanRuntime {
       const state = this.policyStateBuilder.build();
       this.policyRunner.reset(state);
       this.policyControl = this.buildPolicyControl(config, runner, this.policyStateBuilder);
+
+      // Initialize termination manager if termination config is present
+      if (config.terminations && Object.keys(config.terminations).length > 0) {
+        this.terminationManager = new TerminationManager(config.terminations, Terminations);
+        console.log(`[TerminationManager] ${this.terminationManager.size} termination term(s) loaded`);
+      }
 
       if (config.onnx?.path) {
         const onnxPath = this.resolvePolicyAssetPath(policyConfigPath, config.onnx.path);
@@ -634,7 +659,32 @@ export class mjswanRuntime {
       kd: Float32Array;
     }
     | null {
-    const controlType = config.control_type ?? 'joint_position';
+    // Resolve control type and action scale from new `actions` config
+    // or fall back to legacy flat fields for compatibility.
+    let controlType: string;
+    let configScale: number[] | number | undefined;
+    let useDefaultOffset = true;
+
+    const actionsConfig = config.actions;
+    if (actionsConfig) {
+      // Use the first action term to determine control type
+      const firstTerm = Object.values(actionsConfig)[0];
+      if (firstTerm) {
+        controlType = firstTerm.type ?? 'joint_position';
+        if (typeof firstTerm.scale === 'number') {
+          configScale = firstTerm.scale;
+        }
+        if (firstTerm.use_default_offset !== undefined) {
+          useDefaultOffset = firstTerm.use_default_offset;
+        }
+      } else {
+        controlType = 'joint_position';
+      }
+    } else {
+      controlType = config.control_type ?? 'joint_position';
+      configScale = config.action_scale;
+    }
+
     if (controlType !== 'joint_position' && controlType !== 'torque') {
       console.warn(`[PolicyRunner] Unsupported control_type: ${controlType}`);
       return null;
@@ -647,8 +697,10 @@ export class mjswanRuntime {
     }
 
     const numActions = mapping.qposAdr.length;
-    const actionScale = this.normalizeControlArray(config.action_scale, numActions, 1.0);
-    const defaultJointPos = runner.getDefaultJointPos();
+    const actionScale = this.normalizeControlArray(configScale ?? config.action_scale, numActions, 1.0);
+    const defaultJointPos = useDefaultOffset
+      ? runner.getDefaultJointPos()
+      : new Float32Array(numActions);
     const kp = this.normalizeControlArray(config.stiffness, numActions, 0.0);
     const kd = this.normalizeControlArray(config.damping, numActions, 0.0);
 

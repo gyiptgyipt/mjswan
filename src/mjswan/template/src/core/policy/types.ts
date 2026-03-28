@@ -29,6 +29,20 @@ export type ObservationGroupConfig =
     components?: ObservationConfigEntry[];
   };
 
+export type ActionConfigEntry = {
+  type: string;
+  scale?: number | Record<string, number>;
+  offset?: number | Record<string, number>;
+  use_default_offset?: boolean;
+  [key: string]: unknown;
+};
+
+export type TerminationConfigEntry = {
+  name: string;
+  params?: Record<string, unknown>;
+  time_out?: boolean;
+};
+
 export type PolicyConfig = {
   policy_module?: string;
   policy_joint_names?: string[];
@@ -44,6 +58,8 @@ export type PolicyConfig = {
       out_keys?: (string | string[])[];
     };
   };
-  obs_config?: Record<string, ObservationGroupConfig>;
+  observations?: Record<string, ObservationGroupConfig>;
+  actions?: Record<string, ActionConfigEntry>;
+  terminations?: Record<string, TerminationConfigEntry>;
   [key: string]: unknown;
 };

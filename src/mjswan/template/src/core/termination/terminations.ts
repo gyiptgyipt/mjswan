@@ -1,0 +1,98 @@
+import { TerminationBase, type TerminationConfig } from './TerminationBase';
+import type { PolicyState } from '../policy/types';
+
+/**
+ * Terminate when the episode step count exceeds max_episode_length.
+ *
+ * mjlab: env.episode_length_buf >= env.max_episode_length
+ */
+export class TimeOut extends TerminationBase {
+  private stepCount = 0;
+  private maxSteps: number;
+
+  constructor(config: TerminationConfig) {
+    super(config);
+    const params = config.params ?? {};
+    this.maxSteps = (params.max_episode_length as number) ?? 1000;
+  }
+
+  evaluate(_state: PolicyState): boolean {
+    this.stepCount++;
+    return this.stepCount >= this.maxSteps;
+  }
+
+  reset(): void {
+    this.stepCount = 0;
+  }
+}
+
+/**
+ * Terminate when the robot's orientation exceeds a limit angle.
+ *
+ * Uses the projected gravity vector from PolicyState to compute the
+ * angle between the robot's up axis and world up.
+ *
+ * mjlab: torch.acos(-projected_gravity[:, 2]).abs() > limit_angle
+ */
+export class BadOrientation extends TerminationBase {
+  private limitAngle: number;
+
+  constructor(config: TerminationConfig) {
+    super(config);
+    const params = config.params ?? {};
+    this.limitAngle = (params.limit_angle as number) ?? 1.0;
+  }
+
+  evaluate(state: PolicyState): boolean {
+    const rootQuat = state.rootQuat;
+    if (!rootQuat || rootQuat.length < 4) return false;
+
+    // Compute projected gravity z-component from quaternion.
+    // For quaternion [w, x, y, z], the body-frame z-component of gravity is:
+    // gz = 2*(x*z - w*y)  [for gravity pointing down in world frame]
+    // The angle from upright = acos(-gz) where gz is the z-component
+    // of the unit gravity vector projected into body frame.
+    const w = rootQuat[0];
+    const x = rootQuat[1];
+    const y = rootQuat[2];
+    const z = rootQuat[3];
+
+    // Body-frame gravity z-component (assuming world gravity = [0, 0, -1])
+    const gz = 1.0 - 2.0 * (x * x + y * y);
+    const angle = Math.acos(Math.max(-1.0, Math.min(1.0, gz)));
+
+    return Math.abs(angle) > this.limitAngle;
+  }
+}
+
+/**
+ * Terminate when the robot's root height drops below a minimum.
+ *
+ * mjlab: asset.data.root_link_pos_w[:, 2] < minimum_height
+ */
+export class RootHeightBelowMinimum extends TerminationBase {
+  private minimumHeight: number;
+
+  constructor(config: TerminationConfig) {
+    super(config);
+    const params = config.params ?? {};
+    this.minimumHeight = (params.minimum_height as number) ?? 0.0;
+  }
+
+  evaluate(state: PolicyState): boolean {
+    const rootPos = state.rootPos;
+    if (!rootPos || rootPos.length < 3) return false;
+    return rootPos[2] < this.minimumHeight;
+  }
+}
+
+export type TerminationConstructor = new (config: TerminationConfig) => TerminationBase;
+
+/**
+ * Registry mapping termination class names to constructors.
+ */
+export const Terminations: Record<string, TerminationConstructor> = {
+  TimeOut,
+  BadOrientation,
+  RootHeightBelowMinimum,
+};

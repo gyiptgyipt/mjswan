@@ -14,7 +14,9 @@ import onnx
 from .command import CommandGroupConfig, CommandInput, velocity_command
 
 if TYPE_CHECKING:
+    from .envs.mdp.actions.actions import ActionTermCfg
     from .managers.observation_manager import ObservationGroupCfg
+    from .managers.termination_manager import TerminationTermCfg
     from .scene import SceneHandle
 
 
@@ -45,7 +47,23 @@ class PolicyConfig:
 
     Keys are group names (e.g. ``"policy"``, ``"critic"``).  Values are
     ``ObservationGroupCfg`` instances whose terms are serialized into
-    ``obs_config`` in the policy JSON at build time.
+    ``observations`` in the policy JSON at build time.
+    """
+
+    actions: dict[str, ActionTermCfg] | None = None
+    """Action term configurations (mjlab-compatible).
+
+    Keys are term names (e.g. ``"joint_pos"``).  Values are
+    ``ActionTermCfg`` subclass instances serialized into ``actions``
+    in the policy JSON at build time.
+    """
+
+    terminations: dict[str, TerminationTermCfg] | None = None
+    """Termination term configurations (mjlab-compatible).
+
+    Keys are term names (e.g. ``"time_out"``, ``"fallen"``).  Values are
+    ``TerminationTermCfg`` instances serialized into ``terminations``
+    in the policy JSON at build time.
     """
 
 

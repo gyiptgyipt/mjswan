@@ -17,7 +17,9 @@ from .splat import SplatConfig, SplatHandle
 from .viewer_config import ViewerConfig
 
 if TYPE_CHECKING:
+    from .envs.mdp.actions.actions import ActionTermCfg
     from .managers.observation_manager import ObservationGroupCfg
+    from .managers.termination_manager import TerminationTermCfg
     from .project import ProjectHandle
 
 
@@ -80,6 +82,8 @@ class SceneHandle:
         source_path: str | None = None,
         config_path: str | None = None,
         observations: dict[str, ObservationGroupCfg] | None = None,
+        actions: dict[str, ActionTermCfg] | None = None,
+        terminations: dict[str, TerminationTermCfg] | None = None,
     ) -> PolicyHandle:
         """Add an ONNX policy to this scene.
 
@@ -92,6 +96,12 @@ class SceneHandle:
             observations: Observation group configurations (mjlab-compatible).
                 Keys are group names (e.g. ``"policy"``); values are
                 :class:`ObservationGroupCfg` instances.
+            actions: Action term configurations (mjlab-compatible).
+                Keys are term names (e.g. ``"joint_pos"``); values are
+                :class:`ActionTermCfg` subclass instances.
+            terminations: Termination term configurations (mjlab-compatible).
+                Keys are term names (e.g. ``"time_out"``); values are
+                :class:`TerminationTermCfg` instances.
 
         Returns:
             PolicyHandle for configuring the policy (adding commands, etc.)
@@ -132,6 +142,8 @@ class SceneHandle:
             source_path=source_path,
             config_path=config_path,
             observations=observations,
+            actions=actions,
+            terminations=terminations,
         )
         self._config.policies.append(policy_config)
         return PolicyHandle(policy_config, self)
