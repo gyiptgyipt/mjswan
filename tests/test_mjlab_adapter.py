@@ -9,8 +9,6 @@ with the same attributes that the adapter inspects, placed in a fake
 
 from __future__ import annotations
 
-import types
-from dataclasses import dataclass, field
 from typing import Any
 
 import pytest
@@ -25,12 +23,9 @@ from mjswan.envs.mdp.terminations import TermFunc
 from mjswan.managers.observation_manager import ObservationGroupCfg, ObservationTermCfg
 from mjswan.managers.termination_manager import TerminationTermCfg
 
-
 # ---------------------------------------------------------------------------
 # Fake mjlab types — classes whose __module__ starts with "mjlab"
 # ---------------------------------------------------------------------------
-
-_fake_mjlab_module = types.ModuleType("mjlab.fake")
 
 
 def _make_mjlab_class(name: str, **defaults: Any) -> type:

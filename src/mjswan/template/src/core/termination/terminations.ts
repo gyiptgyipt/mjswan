@@ -47,19 +47,9 @@ export class BadOrientation extends TerminationBase {
     const rootQuat = state.rootQuat;
     if (!rootQuat || rootQuat.length < 4) return false;
 
-    // Compute projected gravity z-component from quaternion.
-    // For quaternion [w, x, y, z], the body-frame z-component of gravity is:
-    // gz = 2*(x*z - w*y)  [for gravity pointing down in world frame]
-    // The angle from upright = acos(-gz) where gz is the z-component
-    // of the unit gravity vector projected into body frame.
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    const w = rootQuat[0];
+    // Compute tilt angle from quaternion.
     const x = rootQuat[1];
     const y = rootQuat[2];
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    const z = rootQuat[3];
-
-    // Body-frame gravity z-component (assuming world gravity = [0, 0, -1])
     const gz = 1.0 - 2.0 * (x * x + y * y);
     const angle = Math.acos(Math.max(-1.0, Math.min(1.0, gz)));
 
