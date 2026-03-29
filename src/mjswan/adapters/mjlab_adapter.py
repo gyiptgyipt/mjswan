@@ -134,9 +134,15 @@ def adapt_observations(
 def _adapt_term_func(func: Any) -> TermFunc:
     """Convert an mjlab termination callable to an mjswan ``TermFunc`` sentinel.
 
-    Looks up ``func.__name__`` directly on
+    If *func* is already an mjswan ``TermFunc`` it is returned as-is, so
+    mjswan sentinels can be passed directly inside mjlab ``TerminationTermCfg``
+    for functions that have no mjlab equivalent.
+
+    Otherwise, looks up ``func.__name__`` directly on
     ``mjswan.envs.mdp.terminations``.
     """
+    if isinstance(func, TermFunc):
+        return func
     name = getattr(func, "__name__", None)
     sentinel = getattr(_term_module, name, None) if name else None
     if isinstance(sentinel, TermFunc):
