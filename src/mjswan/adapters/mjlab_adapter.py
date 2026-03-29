@@ -62,9 +62,15 @@ def _is_from_mjlab(obj: Any) -> bool:
 def _adapt_obs_func(func: Any) -> ObsFunc:
     """Convert an mjlab observation callable to an mjswan ``ObsFunc`` sentinel.
 
-    Looks up ``func.__name__`` directly on
+    If *func* is already an mjswan ``ObsFunc`` it is returned as-is, so
+    mjswan sentinels can be passed directly inside mjlab ``ObservationTermCfg``
+    for functions that have no mjlab equivalent (e.g. ``simple_velocity_command``).
+
+    Otherwise, looks up ``func.__name__`` directly on
     ``mjswan.envs.mdp.observations``.
     """
+    if isinstance(func, ObsFunc):
+        return func
     name = getattr(func, "__name__", None)
     sentinel = getattr(_obs_module, name, None) if name else None
     if isinstance(sentinel, ObsFunc):

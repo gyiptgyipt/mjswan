@@ -10,17 +10,10 @@ from pathlib import Path
 import mujoco
 import onnx
 from mjlab.envs.mdp import observations as obs_fns
-from mjlab.envs.mdp.actions import JointPositionActionCfg
 from mjlab.managers.observation_manager import ObservationGroupCfg, ObservationTermCfg
 
 import mjswan
-
-
-# mjlab has no simple_velocity_command. The mjswan adapter maps obs functions by
-# __name__, so a local callable with the correct __name__ resolves to the
-# SimpleVelocityCommand TS class and works with add_velocity_command().
-def simple_velocity_command(*args, **kwargs): ...
-
+from mjswan.envs.mdp.actions import JointPositionActionCfg
 
 # G1 humanoid: per-joint action scale, stiffness, damping (keyed by joint name)
 _G1_SCALE = {
@@ -53,6 +46,68 @@ _G1_SCALE = {
     "right_wrist_roll_joint": 0.43857731392336724,
     "right_wrist_pitch_joint": 0.07450087032950714,
     "right_wrist_yaw_joint": 0.07450087032950714,
+}
+_G1_STIFFNESS = {
+    "left_hip_pitch_joint": 40.17923863450712,
+    "left_hip_roll_joint": 99.09842777666111,
+    "left_hip_yaw_joint": 40.17923863450712,
+    "left_knee_joint": 99.09842777666111,
+    "left_ankle_pitch_joint": 28.50124619574858,
+    "left_ankle_roll_joint": 28.50124619574858,
+    "right_hip_pitch_joint": 40.17923863450712,
+    "right_hip_roll_joint": 99.09842777666111,
+    "right_hip_yaw_joint": 40.17923863450712,
+    "right_knee_joint": 99.09842777666111,
+    "right_ankle_pitch_joint": 28.50124619574858,
+    "right_ankle_roll_joint": 28.50124619574858,
+    "waist_yaw_joint": 40.17923863450712,
+    "waist_roll_joint": 28.50124619574858,
+    "waist_pitch_joint": 28.50124619574858,
+    "left_shoulder_pitch_joint": 14.25062309787429,
+    "left_shoulder_roll_joint": 14.25062309787429,
+    "left_shoulder_yaw_joint": 14.25062309787429,
+    "left_elbow_joint": 14.25062309787429,
+    "left_wrist_roll_joint": 14.25062309787429,
+    "left_wrist_pitch_joint": 16.77832748089279,
+    "left_wrist_yaw_joint": 16.77832748089279,
+    "right_shoulder_pitch_joint": 14.25062309787429,
+    "right_shoulder_roll_joint": 14.25062309787429,
+    "right_shoulder_yaw_joint": 14.25062309787429,
+    "right_elbow_joint": 14.25062309787429,
+    "right_wrist_roll_joint": 14.25062309787429,
+    "right_wrist_pitch_joint": 16.77832748089279,
+    "right_wrist_yaw_joint": 16.77832748089279,
+}
+_G1_DAMPING = {
+    "left_hip_pitch_joint": 2.557889775413375,
+    "left_hip_roll_joint": 6.308801853496639,
+    "left_hip_yaw_joint": 2.557889775413375,
+    "left_knee_joint": 6.308801853496639,
+    "left_ankle_pitch_joint": 1.814445686584846,
+    "left_ankle_roll_joint": 1.814445686584846,
+    "right_hip_pitch_joint": 2.557889775413375,
+    "right_hip_roll_joint": 6.308801853496639,
+    "right_hip_yaw_joint": 2.557889775413375,
+    "right_knee_joint": 6.308801853496639,
+    "right_ankle_pitch_joint": 1.814445686584846,
+    "right_ankle_roll_joint": 1.814445686584846,
+    "waist_yaw_joint": 2.557889775413375,
+    "waist_roll_joint": 1.814445686584846,
+    "waist_pitch_joint": 1.814445686584846,
+    "left_shoulder_pitch_joint": 0.907222843292423,
+    "left_shoulder_roll_joint": 0.907222843292423,
+    "left_shoulder_yaw_joint": 0.907222843292423,
+    "left_elbow_joint": 0.907222843292423,
+    "left_wrist_roll_joint": 0.907222843292423,
+    "left_wrist_pitch_joint": 1.06814150219,
+    "left_wrist_yaw_joint": 1.06814150219,
+    "right_shoulder_pitch_joint": 0.907222843292423,
+    "right_shoulder_roll_joint": 0.907222843292423,
+    "right_shoulder_yaw_joint": 0.907222843292423,
+    "right_elbow_joint": 0.907222843292423,
+    "right_wrist_roll_joint": 0.907222843292423,
+    "right_wrist_pitch_joint": 1.06814150219,
+    "right_wrist_yaw_joint": 1.06814150219,
 }
 
 
@@ -91,12 +146,16 @@ def setup_builder() -> mjswan.Builder:
         name="Locomotion",
         config_path="assets/unitree_g1/locomotion.json",
         actions={
-            # mjlab's JointPositionActionCfg does not have stiffness/damping fields;
-            # those are mjswan-specific and are omitted here.
+            # mjlab's JointPositionActionCfg has no stiffness/damping fields, so
+            # mjswan's JointPositionActionCfg is used directly for the actions dict.
+            # Stiffness/damping are required here because G1 uses motor actuators
+            # (biastype=none) that need external PD control in the browser runtime.
             "joint_pos": JointPositionActionCfg(
                 entity_name="robot",
                 actuator_names=(".*",),
                 scale=_G1_SCALE,
+                stiffness=_G1_STIFFNESS,
+                damping=_G1_DAMPING,
             ),
         },
         observations={
@@ -112,9 +171,10 @@ def setup_builder() -> mjswan.Builder:
                     ),
                     "joint_vel": ObservationTermCfg(func=obs_fns.joint_vel_rel),
                     "last_action": ObservationTermCfg(func=obs_fns.last_action),
-                    # mjlab has no simple_velocity_command; using generated_commands
-                    # as a stand-in for adapter debugging.
-                    "velocity_cmd": ObservationTermCfg(func=simple_velocity_command),
+                    "velocity_cmd": ObservationTermCfg(
+                        func=obs_fns.generated_commands,
+                        params={"command_name": "velocity"},
+                    ),
                 }
             )
         },
