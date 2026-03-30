@@ -78,6 +78,7 @@ class BaseActionCfg(ActionTermCfg):
             entry["scale"] = self.scale
         if self.offset != 0.0:
             entry["offset"] = self.offset
+        entry["actuator_names"] = list(self.actuator_names)
         return entry
 
 
@@ -115,6 +116,7 @@ class JointPositionActionCfg(BaseActionCfg):
             entry["scale"] = self.scale
         if self.offset != 0.0:
             entry["offset"] = self.offset
+        entry["actuator_names"] = list(self.actuator_names)
         entry["use_default_offset"] = self.use_default_offset
         if self.stiffness is not None:
             entry["stiffness"] = self.stiffness
@@ -168,6 +170,7 @@ class JointEffortActionCfg(BaseActionCfg):
             entry["scale"] = self.scale
         if self.offset != 0.0:
             entry["offset"] = self.offset
+        entry["actuator_names"] = list(self.actuator_names)
         if self.stiffness is not None:
             entry["stiffness"] = self.stiffness
         if self.damping is not None:

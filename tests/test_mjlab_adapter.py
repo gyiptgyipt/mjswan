@@ -289,7 +289,7 @@ class TestAdaptActions:
             result = adapt_actions({"weird": mjlab_cfg})
 
         assert result is not None
-        assert result["weird"].unsupported_reason is not None
+        assert "weird" not in result
 
     def test_mixed_mjswan_and_mjlab(self):
         """Both mjswan-native and mjlab types in the same dict."""

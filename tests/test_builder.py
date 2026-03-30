@@ -494,7 +494,11 @@ class TestSaveWebPolicyJson:
             actions={"effort": JointEffortActionCfg(actuator_names=(".*",), scale=3.0)},
         )
         data = self._policy_json(self._run(builder, tmp_path), "Policy")
-        assert data["actions"]["effort"] == {"type": "torque", "scale": 3.0}
+        assert data["actions"]["effort"] == {
+            "type": "torque",
+            "scale": 3.0,
+            "actuator_names": [".*"],
+        }
 
     def test_joint_position_default_offset_serialized(
         self, tmp_path, minimal_model, minimal_onnx

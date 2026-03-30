@@ -184,12 +184,15 @@ def adapt_terminations(
 # ---------------------------------------------------------------------------
 
 
-def _adapt_action_cfg(term: Any) -> MjswanActionTermCfg:
+def _adapt_action_cfg(term: Any) -> MjswanActionTermCfg | None:
     """Convert a single mjlab ``ActionTermCfg`` to mjswan.
 
     Looks up ``type(term).__name__`` on ``mjswan.envs.mdp.actions`` to
     find the corresponding mjswan class, then copies all matching
     dataclass fields automatically.
+
+    Returns ``None`` if no mjswan equivalent exists; the caller is
+    responsible for dropping the entry.
     """
     class_name = type(term).__name__
     mjswan_cls = getattr(_actions_module, class_name, None)
@@ -199,18 +202,11 @@ def _adapt_action_cfg(term: Any) -> MjswanActionTermCfg:
     ):
         warnings.warn(
             f"mjlab action type '{class_name}' has no mjswan equivalent. "
-            f"It will be skipped at build time.",
+            f"It will be skipped.",
             category=RuntimeWarning,
             stacklevel=3,
         )
-        from ..envs.mdp.actions.actions import BaseActionCfg
-
-        return BaseActionCfg(
-            entity_name=getattr(term, "entity_name", "robot"),
-            unsupported_reason=(
-                f"mjlab action type '{class_name}' is not supported in mjswan."
-            ),
-        )
+        return None
 
     # Copy all matching dataclass fields from the mjlab instance
     kwargs: dict[str, Any] = {}
@@ -229,14 +225,17 @@ def adapt_actions(
     """Adapt action configs, converting mjlab types if detected."""
     if actions is None:
         return None
-    return {
-        key: term
-        if isinstance(term, MjswanActionTermCfg)
-        else _adapt_action_cfg(term)
-        if _is_from_mjlab(term)
-        else term
-        for key, term in actions.items()
-    }
+    result: dict[str, MjswanActionTermCfg] = {}
+    for key, term in actions.items():
+        if isinstance(term, MjswanActionTermCfg):
+            result[key] = term
+        elif _is_from_mjlab(term):
+            adapted = _adapt_action_cfg(term)
+            if adapted is not None:
+                result[key] = adapted
+        else:
+            result[key] = term
+    return result
 
 
 __all__ = ["adapt_observations", "adapt_actions", "adapt_terminations"]

@@ -112,8 +112,8 @@ _G1_DAMPING = {
 _G1_OFFSET = {
     "left_shoulder_pitch_joint": 0.5,
     "right_shoulder_pitch_joint": -0.5,
-    "left_wrist_roll_joint": 2.3,
-    "right_wrist_roll_joint": 2.3,
+    "left_wrist_roll_joint": 2.0,
+    "right_wrist_roll_joint": -2.0,
 }
 
 
