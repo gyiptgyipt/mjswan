@@ -153,6 +153,93 @@ class SceneHandle:
         self._config.policies.append(policy_config)
         return PolicyHandle(policy_config, self)
 
+    def add_policy_from_wandb(
+        self,
+        run_path: str,
+        *,
+        only_latest: bool = True,
+        config_path: str | None = None,
+        metadata: dict[str, Any] | None = None,
+        observations: dict[str, ObservationGroupCfg] | dict[str, Any] | None = None,
+        actions: Mapping[str, ActionTermCfg] | Mapping[str, Any] | None = None,
+        terminations: dict[str, TerminationTermCfg] | dict[str, Any] | None = None,
+    ) -> list[PolicyHandle]:
+        """Add ONNX policies fetched from a W&B run to this scene.
+
+        Fetches every ``.onnx`` file from the specified W&B run and adds each
+        one as a policy.  The policy name is the filename without its extension
+        (e.g. ``"2026-02-25_04-30-08.onnx"`` becomes ``"2026-02-25_04-30-08"``).
+
+        ``config_path``, ``observations``, ``actions``, and ``terminations`` are
+        applied identically to every policy fetched from the run.
+
+        Args:
+            run_path: W&B run path in the format ``"entity/project/run_id"``.
+            only_latest: If ``True`` (default), fetches only the ``.onnx`` file
+                from the run (the latest exported checkpoint).  ``False`` is
+                reserved for full checkpoint conversion and is not yet
+                implemented.
+            config_path: Optional path to a policy config JSON file applied to
+                all fetched policies.
+            metadata: Optional metadata dictionary applied to all fetched
+                policies.
+            observations: Observation group configurations applied to all
+                fetched policies.
+            actions: Action term configurations applied to all fetched policies.
+            terminations: Termination term configurations applied to all fetched
+                policies.
+
+        Returns:
+            List of :class:`PolicyHandle` instances, one per fetched policy.
+
+        Raises:
+            NotImplementedError: If ``only_latest=False`` is requested.
+            ValueError: If no ``.onnx`` files are found in the W&B run.
+
+        Example:
+            ```python
+            scene.add_policy_from_wandb(
+                run_path="my-org/my-project/run-id",
+                config_path="assets/locomotion.json",
+                actions={
+                    "joint_pos": JointPositionActionCfg(
+                        scale=1.013,
+                        stiffness=19.739,
+                        damping=1.257,
+                    )
+                },
+                observations={
+                    "obs": ObservationGroupCfg(
+                        terms={
+                            "base_lin_vel": ObservationTermCfg(func=obs_fns.base_lin_vel),
+                        }
+                    )
+                },
+            )
+            ```
+        """
+        if not only_latest:
+            raise NotImplementedError(
+                "only_latest=False (PT checkpoint conversion) is not yet implemented."
+            )
+
+        from .wandb_utils import fetch_onnx_from_wandb_run
+
+        entries = fetch_onnx_from_wandb_run(run_path)
+        handles = []
+        for name, model in entries:
+            handle = self.add_policy(
+                name=name,
+                policy=model,
+                config_path=config_path,
+                metadata=metadata,
+                observations=observations,
+                actions=actions,
+                terminations=terminations,
+            )
+            handles.append(handle)
+        return handles
+
     def add_splat(
         self,
         name: str,
