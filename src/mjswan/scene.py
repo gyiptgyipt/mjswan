@@ -158,6 +158,7 @@ class SceneHandle:
         run_path: str,
         *,
         only_latest: bool = True,
+        task_id: str | None = None,
         config_path: str | None = None,
         metadata: dict[str, Any] | None = None,
         observations: dict[str, ObservationGroupCfg] | dict[str, Any] | None = None,
@@ -166,19 +167,18 @@ class SceneHandle:
     ) -> list[PolicyHandle]:
         """Add ONNX policies fetched from a W&B run to this scene.
 
-        Fetches every ``.onnx`` file from the specified W&B run and adds each
-        one as a policy.  The policy name is the filename without its extension
-        (e.g. ``"2026-02-25_04-30-08.onnx"`` becomes ``"2026-02-25_04-30-08"``).
-
         ``config_path``, ``observations``, ``actions``, and ``terminations`` are
         applied identically to every policy fetched from the run.
 
         Args:
             run_path: W&B run path in the format ``"entity/project/run_id"``.
             only_latest: If ``True`` (default), fetches only the ``.onnx`` file
-                from the run (the latest exported checkpoint).  ``False`` is
-                reserved for full checkpoint conversion and is not yet
-                implemented.
+                from the run (the latest exported checkpoint).  If ``False``,
+                fetches all ``model_*.pt`` checkpoints and converts each to ONNX
+                via mjlab — requires ``mjlab`` and ``torch`` to be installed and
+                ``task_id`` to be provided.
+            task_id: mjlab task identifier required when ``only_latest=False``
+                (e.g. ``"go2_flat"``).  Ignored when ``only_latest=True``.
             config_path: Optional path to a policy config JSON file applied to
                 all fetched policies.
             metadata: Optional metadata dictionary applied to all fetched
@@ -193,39 +193,45 @@ class SceneHandle:
             List of :class:`PolicyHandle` instances, one per fetched policy.
 
         Raises:
-            NotImplementedError: If ``only_latest=False`` is requested.
-            ValueError: If no ``.onnx`` files are found in the W&B run.
+            ValueError: If ``only_latest=False`` and ``task_id`` is not provided,
+                or if no matching files are found in the W&B run.
+            ImportError: If ``only_latest=False`` and ``mjlab``/``torch`` are not
+                installed.
 
-        Example:
+        Example — latest checkpoint only:
             ```python
             scene.add_policy_from_wandb(
                 run_path="my-org/my-project/run-id",
                 config_path="assets/locomotion.json",
-                actions={
-                    "joint_pos": JointPositionActionCfg(
-                        scale=1.013,
-                        stiffness=19.739,
-                        damping=1.257,
-                    )
-                },
-                observations={
-                    "obs": ObservationGroupCfg(
-                        terms={
-                            "base_lin_vel": ObservationTermCfg(func=obs_fns.base_lin_vel),
-                        }
-                    )
-                },
+                actions={"joint_pos": JointPositionActionCfg(scale=1.0)},
+            )
+            ```
+
+        Example — all logged checkpoints:
+            ```python
+            scene.add_policy_from_wandb(
+                run_path="my-org/my-project/run-id",
+                only_latest=False,
+                task_id="go2_flat",
+                config_path="assets/locomotion.json",
+                actions={"joint_pos": JointPositionActionCfg(scale=1.0)},
             )
             ```
         """
-        if not only_latest:
-            raise NotImplementedError(
-                "only_latest=False (PT checkpoint conversion) is not yet implemented."
-            )
+        if only_latest:
+            from .wandb_utils import fetch_onnx_from_wandb_run
 
-        from .wandb_utils import fetch_onnx_from_wandb_run
+            entries = fetch_onnx_from_wandb_run(run_path)
+        else:
+            if task_id is None:
+                raise ValueError(
+                    "task_id is required when only_latest=False. "
+                    "Provide the mjlab task identifier, e.g. task_id='go2_flat'."
+                )
+            from .wandb_utils import fetch_pt_onnx_from_wandb_run
 
-        entries = fetch_onnx_from_wandb_run(run_path)
+            entries = fetch_pt_onnx_from_wandb_run(run_path, task_id)
+
         handles = []
         for name, model in entries:
             handle = self.add_policy(
