@@ -92,6 +92,7 @@ class SceneHandle:
         actions: Mapping[str, ActionTermCfg] | Mapping[str, Any] | None = None,
         terminations: dict[str, TerminationTermCfg] | dict[str, Any] | None = None,
         policy_joint_names: list[str] | None = None,
+        default_joint_pos: list[float] | None = None,
     ) -> PolicyHandle:
         """Add an ONNX policy to this scene.
 
@@ -158,6 +159,7 @@ class SceneHandle:
             actions=adapted_actions,
             terminations=adapted_terminations,
             policy_joint_names=policy_joint_names,
+            default_joint_pos=default_joint_pos,
         )
         self._config.policies.append(policy_config)
         return PolicyHandle(policy_config, self)
@@ -244,7 +246,8 @@ class SceneHandle:
         handles = []
         for entry in entries:
             name, model, *rest = entry
-            joint_names: list[str] | None = rest[0] if rest else None
+            joint_names: list[str] | None = rest[0] if len(rest) > 0 else None
+            djp: list[float] | None = rest[1] if len(rest) > 1 else None
             handle = self.add_policy(
                 name=name,
                 policy=model,
@@ -254,6 +257,7 @@ class SceneHandle:
                 actions=actions,
                 terminations=terminations,
                 policy_joint_names=joint_names,
+                default_joint_pos=djp,
             )
             handles.append(handle)
         return handles

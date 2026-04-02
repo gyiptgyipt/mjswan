@@ -75,6 +75,13 @@ class PolicyConfig:
     ``policy_joint_names`` at the top level of the policy JSON config.
     """
 
+    default_joint_pos: list[float] | None = None
+    """Default joint positions corresponding to ``policy_joint_names``.
+
+    Used by the browser runtime when ``use_default_offset=True``: action=0
+    commands this pose.  Must be in the same order as ``policy_joint_names``.
+    """
+
 
 class PolicyHandle:
     """Handle for configuring a policy and its commands.

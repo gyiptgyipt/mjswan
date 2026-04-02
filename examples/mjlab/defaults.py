@@ -18,7 +18,7 @@ TASK_RUN_ID_MAP = {
     # "Mjlab-Lift-Cube-Yam-Depth": "",
     # "Mjlab-Lift-Cube-Yam-Rgb": "",
     "Mjlab-Velocity-Flat-Unitree-G1": "vel-flat-g1",
-    "Mjlab-Velocity-Flat-Unitree-Go1": "i5gwws6r",
+    "Mjlab-Velocity-Flat-Unitree-Go1": "vel-flat-go1-v3",
     # "Mjlab-Velocity-Rough-Unitree-G1": "",
     # "Mjlab-Velocity-Rough-Unitree-Go1": "",
 }

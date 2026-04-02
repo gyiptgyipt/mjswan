@@ -51,7 +51,7 @@ def fetch_onnx_from_wandb_run(run_path: str) -> list[tuple[str, onnx.ModelProto]
 def fetch_pt_onnx_from_wandb_run(
     run_path: str,
     task_id: str,
-) -> list[tuple[str, onnx.ModelProto, list[str]]]:
+) -> list[tuple[str, onnx.ModelProto, list[str], list[float]]]:
     """Download all ``model_*.pt`` checkpoints from a W&B run and convert each to ONNX.
 
     Checkpoints are sorted by training step before conversion, so the returned
@@ -67,10 +67,10 @@ def fetch_pt_onnx_from_wandb_run(
             reconstruct the environment and runner required for ONNX export.
 
     Returns:
-        List of ``(policy_name, onnx_model, joint_names)`` tuples sorted by
-        training step, where policy_name is the filename without extension
-        (e.g. ``"model_50"``) and joint_names is the ordered list of joints
-        controlled by the policy (from the environment's action manager).
+        List of ``(policy_name, onnx_model, joint_names, default_joint_pos)``
+        tuples sorted by training step, where joint_names is the ordered list
+        of joints controlled by the policy and default_joint_pos is the default
+        pose (action=0 target) in the same order.
 
     Raises:
         ImportError: If ``mjlab`` or ``torch`` are not installed.
@@ -103,7 +103,7 @@ def fetch_pt_onnx_from_wandb_run(
     # Sort by training step number (model_0.pt < model_50.pt < model_100.pt, …)
     pt_files.sort(key=lambda f: int(re.search(r"\d+", f.name).group()))  # type: ignore[union-attr]
 
-    results: list[tuple[str, onnx.ModelProto, list[str]]] = []
+    results: list[tuple[str, onnx.ModelProto, list[str], list[float]]] = []
     with tempfile.TemporaryDirectory() as tmp_dir:
         tmp_path = Path(tmp_dir)
 
@@ -119,13 +119,10 @@ def fetch_pt_onnx_from_wandb_run(
             runner_cls = load_runner_cls(task_id) or MjlabOnPolicyRunner
             runner = runner_cls(env, asdict(agent_cfg), device="cpu")
 
-            # Collect policy joint names from the action manager.
-            # Use the first action term's target_names as the canonical ordered
-            # list of joints controlled by the policy.  Prefix each name with
-            # the entity name (e.g. "robot") so names match the MuJoCo model
-            # embedded in the scene (where joints are namespaced as
-            # "robot/joint_name").
+            # Collect joint names from first action term, prefixed with entity name
+            # (e.g. "robot/FR_hip_joint") to match the MuJoCo model namespace.
             joint_names: list[str] = []
+            default_joint_pos: list[float] = []
             inner_env = env.env if hasattr(env, "env") else env
             action_mgr = getattr(inner_env, "action_manager", None)
             if action_mgr is not None:
@@ -137,6 +134,16 @@ def fetch_pt_onnx_from_wandb_run(
                         )
                         prefix = f"{entity_name}/" if entity_name else ""
                         joint_names = [f"{prefix}{n}" for n in term.target_names]
+                        # Default joint positions (the pose action=0 commands)
+                        if hasattr(term, "offset") and term.offset is not None:
+                            offset = term.offset
+                            if hasattr(offset, "tolist"):
+                                flat = offset.flatten().tolist()
+                            elif hasattr(offset, "__iter__"):
+                                flat = list(offset)
+                            else:
+                                flat = [float(offset)] * len(joint_names)
+                            default_joint_pos = flat[: len(joint_names)]
                         break
 
             for wandb_file in pt_files:
@@ -154,7 +161,7 @@ def fetch_pt_onnx_from_wandb_run(
                 runner.export_policy_to_onnx(tmp_dir, onnx_filename)
 
                 model = onnx.load(str(tmp_path / onnx_filename))
-                results.append((name, model, joint_names))
+                results.append((name, model, joint_names, default_joint_pos))
         finally:
             env.close()
 

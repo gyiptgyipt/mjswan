@@ -57,11 +57,7 @@ class SplatConfig:
     """Additional metadata for the splat."""
 
     def to_dict(self) -> dict[str, Any]:
-        """Serialize to a dict for config.json.
-
-        When ``source`` is set, the ``path`` key is added externally by
-        :meth:`Builder._build_splat_config_dict` after copying the file.
-        """
+        """Serialize to a dict for config.json. ``path`` is added externally when ``source`` is set."""
         d: dict[str, Any] = {
             "name": self.name,
             "scale": self.scale,
