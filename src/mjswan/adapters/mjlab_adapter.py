@@ -25,6 +25,7 @@ mjlab counterparts, the adapter resolves mappings dynamically via
 from __future__ import annotations
 
 import dataclasses
+import re
 import warnings
 from collections.abc import Mapping
 from typing import Any
@@ -59,7 +60,7 @@ def _is_from_mjlab(obj: Any) -> bool:
 # ---------------------------------------------------------------------------
 
 
-def _adapt_obs_func(func: Any) -> ObsFunc:
+def _adapt_obs_func(func: Any, term_name: str | None = None) -> ObsFunc:
     """Convert an mjlab observation callable to an mjswan ``ObsFunc`` sentinel.
 
     If *func* is already an mjswan ``ObsFunc`` it is returned as-is, so
@@ -67,12 +68,23 @@ def _adapt_obs_func(func: Any) -> ObsFunc:
     for functions that have no mjlab equivalent.
 
     Otherwise, looks up ``func.__name__`` directly on
-    ``mjswan.envs.mdp.observations``.
+    ``mjswan.envs.mdp.observations``.  When the function name resolves to an
+    unsupported sentinel (e.g. ``builtin_sensor`` used for standard state
+    observations in some mjlab tasks), ``term_name`` is tried as a fallback so
+    that terms like ``base_lin_vel`` and ``base_ang_vel`` are resolved
+    correctly even though their underlying mjlab function is ``builtin_sensor``.
     """
     if isinstance(func, ObsFunc):
         return func
     name = getattr(func, "__name__", None)
     sentinel = getattr(_obs_module, name, None) if name else None
+    if isinstance(sentinel, ObsFunc) and sentinel.unsupported_reason is None:
+        return sentinel
+    # Fall back to term name when the function name is missing or unsupported
+    if term_name:
+        fallback = getattr(_obs_module, term_name, None)
+        if isinstance(fallback, ObsFunc):
+            return fallback
     if isinstance(sentinel, ObsFunc):
         return sentinel
     raise ValueError(
@@ -82,10 +94,12 @@ def _adapt_obs_func(func: Any) -> ObsFunc:
     )
 
 
-def _adapt_obs_term(term: Any) -> MjswanObservationTermCfg:
+def _adapt_obs_term(
+    term: Any, term_name: str | None = None
+) -> MjswanObservationTermCfg:
     """Convert a single mjlab ``ObservationTermCfg`` to mjswan."""
     return MjswanObservationTermCfg(
-        func=_adapt_obs_func(term.func),
+        func=_adapt_obs_func(term.func, term_name=term_name),
         params=dict(getattr(term, "params", None) or {}),
         scale=getattr(term, "scale", None),
         clip=getattr(term, "clip", None),
@@ -96,7 +110,9 @@ def _adapt_obs_term(term: Any) -> MjswanObservationTermCfg:
 def _adapt_obs_group(group: Any) -> MjswanObservationGroupCfg:
     """Convert a single mjlab ``ObservationGroupCfg`` to mjswan."""
     raw_terms = getattr(group, "terms", None) or {}
-    terms = {name: _adapt_obs_term(cfg) for name, cfg in raw_terms.items()}
+    terms = {
+        name: _adapt_obs_term(cfg, term_name=name) for name, cfg in raw_terms.items()
+    }
     return MjswanObservationGroupCfg(
         terms=terms,
         concatenate_terms=getattr(group, "concatenate_terms", True),
@@ -238,4 +254,48 @@ def adapt_actions(
     return result
 
 
-__all__ = ["adapt_observations", "adapt_actions", "adapt_terminations"]
+def resolve_action_scales(
+    actions: Mapping[str, MjswanActionTermCfg] | None,
+    joint_names: list[str],
+) -> None:
+    """Resolve regex-pattern scale/offset dicts in action configs to literal joint names.
+
+    mjlab stores per-joint scale as ``{".*_hip_joint": 0.37, ...}`` using regex
+    patterns.  The browser runtime does exact string lookups, so patterns are
+    expanded here against *joint_names* (the ordered list of joints the policy
+    controls, prefixed with the entity name, e.g. ``"robot/left_hip_joint"``).
+
+    Mutates the ``scale`` and ``offset`` fields of each action term in-place.
+    """
+    if not actions or not joint_names:
+        return
+
+    def _resolve(value: Any) -> Any:
+        if not isinstance(value, dict):
+            return value
+        resolved: dict[str, float] = {}
+        for pattern, val in value.items():
+            try:
+                regex = re.compile(pattern)
+            except re.error:
+                resolved[pattern] = val
+                continue
+            for joint_name in joint_names:
+                bare = joint_name.split("/")[-1] if "/" in joint_name else joint_name
+                if regex.fullmatch(bare) or regex.fullmatch(joint_name):
+                    resolved[joint_name] = val
+        return resolved if resolved else value
+
+    for term in actions.values():
+        if hasattr(term, "scale") and isinstance(term.scale, dict):
+            term.scale = _resolve(term.scale)
+        if hasattr(term, "offset") and isinstance(term.offset, dict):
+            term.offset = _resolve(term.offset)
+
+
+__all__ = [
+    "adapt_observations",
+    "adapt_actions",
+    "adapt_terminations",
+    "resolve_action_scales",
+]

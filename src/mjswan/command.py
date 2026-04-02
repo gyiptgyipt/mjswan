@@ -122,6 +122,7 @@ def velocity_command(
     default_lin_vel_x: float = 0.5,
     default_lin_vel_y: float = 0.0,
     default_ang_vel_z: float = 0.0,
+    name: str = "velocity",
 ) -> CommandGroupConfig:
     """Create a standard velocity command group.
 
@@ -140,7 +141,7 @@ def velocity_command(
         CommandGroupConfig with velocity inputs configured
     """
     return CommandGroupConfig(
-        name="velocity",
+        name=name,
         inputs=[
             SliderConfig(
                 name="lin_vel_x",

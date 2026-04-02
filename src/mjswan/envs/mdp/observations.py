@@ -64,7 +64,7 @@ mjlab: ``asset.data.projected_gravity_b``
 # Joint state
 # ---------------------------------------------------------------------------
 
-joint_pos_rel = ObsFunc("JointPos", {"subtract_default": True})
+joint_pos_rel = ObsFunc("JointPos", {"subtract_default": True, "history_steps": 1})
 """Joint positions relative to the default pose.
 
 mjlab: ``asset.data.joint_pos - asset.data.default_joint_pos``

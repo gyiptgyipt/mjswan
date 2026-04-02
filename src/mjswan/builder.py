@@ -484,12 +484,15 @@ class Builder:
                             or policy.observations
                             or policy.actions
                             or policy.terminations
+                            or policy.policy_joint_names
                         ):
                             # No config_path but MDP components defined
                             target = policy_path.with_suffix(".json")
                             data: dict = {
                                 "onnx": {"path": policy_path.name},
                             }
+                            if policy.policy_joint_names:
+                                data["policy_joint_names"] = policy.policy_joint_names
                             if policy.commands:
                                 data["commands"] = {
                                     name: cmd.to_dict()
@@ -506,10 +509,13 @@ class Builder:
                                     for name, cfg in policy.actions.items()
                                 }
                             if policy.terminations:
-                                data["terminations"] = {
+                                terminations = {
                                     name: cfg.to_dict()
                                     for name, cfg in policy.terminations.items()
+                                    if cfg.func.unsupported_reason is None
                                 }
+                                if terminations:
+                                    data["terminations"] = terminations
                             with open(target, "w") as f:
                                 json.dump(data, f, indent=2)
 

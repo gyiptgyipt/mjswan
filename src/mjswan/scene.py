@@ -13,7 +13,12 @@ from typing import TYPE_CHECKING, Any
 import mujoco
 import onnx
 
-from .adapters import adapt_actions, adapt_observations, adapt_terminations
+from .adapters import (
+    adapt_actions,
+    adapt_observations,
+    adapt_terminations,
+    resolve_action_scales,
+)
 from .policy import PolicyConfig, PolicyHandle
 from .splat import SplatConfig, SplatHandle
 from .viewer_config import ViewerConfig
@@ -86,6 +91,7 @@ class SceneHandle:
         observations: dict[str, ObservationGroupCfg] | dict[str, Any] | None = None,
         actions: Mapping[str, ActionTermCfg] | Mapping[str, Any] | None = None,
         terminations: dict[str, TerminationTermCfg] | dict[str, Any] | None = None,
+        policy_joint_names: list[str] | None = None,
     ) -> PolicyHandle:
         """Add an ONNX policy to this scene.
 
@@ -139,6 +145,8 @@ class SceneHandle:
         adapted_observations = adapt_observations(observations)
         adapted_actions = adapt_actions(actions)
         adapted_terminations = adapt_terminations(terminations)
+        if adapted_actions and policy_joint_names:
+            resolve_action_scales(adapted_actions, policy_joint_names)
 
         policy_config = PolicyConfig(
             name=name,
@@ -149,6 +157,7 @@ class SceneHandle:
             observations=adapted_observations,
             actions=adapted_actions,
             terminations=adapted_terminations,
+            policy_joint_names=policy_joint_names,
         )
         self._config.policies.append(policy_config)
         return PolicyHandle(policy_config, self)
@@ -157,7 +166,7 @@ class SceneHandle:
         self,
         run_path: str,
         *,
-        only_latest: bool = True,
+        only_latest: bool = False,
         task_id: str | None = None,
         config_path: str | None = None,
         metadata: dict[str, Any] | None = None,
@@ -172,11 +181,11 @@ class SceneHandle:
 
         Args:
             run_path: W&B run path in the format ``"entity/project/run_id"``.
-            only_latest: If ``True`` (default), fetches only the ``.onnx`` file
-                from the run (the latest exported checkpoint).  If ``False``,
-                fetches all ``model_*.pt`` checkpoints and converts each to ONNX
-                via mjlab — requires ``mjlab`` and ``torch`` to be installed and
-                ``task_id`` to be provided.
+            only_latest: If ``False`` (default), fetches all ``model_*.pt``
+                checkpoints and converts each to ONNX via mjlab — requires
+                ``mjlab`` and ``torch`` to be installed and ``task_id`` to be
+                provided.  If ``True``, fetches only the ``.onnx`` file from
+                the run (the latest exported checkpoint).
             task_id: mjlab task identifier required when ``only_latest=False``
                 (e.g. ``"go2_flat"``).  Ignored when ``only_latest=True``.
             config_path: Optional path to a policy config JSON file applied to
@@ -198,21 +207,21 @@ class SceneHandle:
             ImportError: If ``only_latest=False`` and ``mjlab``/``torch`` are not
                 installed.
 
-        Example — latest checkpoint only:
+        Example — all logged checkpoints (default):
             ```python
             scene.add_policy_from_wandb(
                 run_path="my-org/my-project/run-id",
+                task_id="go2_flat",
                 config_path="assets/locomotion.json",
                 actions={"joint_pos": JointPositionActionCfg(scale=1.0)},
             )
             ```
 
-        Example — all logged checkpoints:
+        Example — latest checkpoint only:
             ```python
             scene.add_policy_from_wandb(
                 run_path="my-org/my-project/run-id",
-                only_latest=False,
-                task_id="go2_flat",
+                only_latest=True,
                 config_path="assets/locomotion.json",
                 actions={"joint_pos": JointPositionActionCfg(scale=1.0)},
             )
@@ -233,7 +242,9 @@ class SceneHandle:
             entries = fetch_pt_onnx_from_wandb_run(run_path, task_id)
 
         handles = []
-        for name, model in entries:
+        for entry in entries:
+            name, model, *rest = entry
+            joint_names: list[str] | None = rest[0] if rest else None
             handle = self.add_policy(
                 name=name,
                 policy=model,
@@ -242,6 +253,7 @@ class SceneHandle:
                 observations=observations,
                 actions=actions,
                 terminations=terminations,
+                policy_joint_names=joint_names,
             )
             handles.append(handle)
         return handles

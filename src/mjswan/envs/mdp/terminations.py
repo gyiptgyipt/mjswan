@@ -70,6 +70,23 @@ mjlab: ``asset.data.root_link_pos_w[:, 2] < minimum_height``
 # Safety / diagnostics (not supported in browser)
 # ---------------------------------------------------------------------------
 
+illegal_contact = TermFunc(
+    ts_name="",
+    unsupported_reason=(
+        "illegal_contact is not supported in mjswan: contact force checks on "
+        "specific bodies are not available in the browser runtime. "
+        "This termination is a training-time safety check and is not needed "
+        "for browser-side policy inference."
+    ),
+)
+"""Terminate when a non-foot body makes illegal contact.
+
+.. note::
+    Not supported in mjswan. Accepted for API compatibility so that mjlab
+    configs can be imported without modification, but raises
+    ``NotImplementedError`` at build time.
+"""
+
 nan_detection = TermFunc(
     ts_name="",
     unsupported_reason=(
@@ -92,5 +109,6 @@ __all__ = [
     "time_out",
     "bad_orientation",
     "root_height_below_minimum",
+    "illegal_contact",
     "nan_detection",
 ]

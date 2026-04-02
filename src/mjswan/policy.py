@@ -67,6 +67,14 @@ class PolicyConfig:
     in the policy JSON at build time.
     """
 
+    policy_joint_names: list[str] | None = None
+    """Ordered list of joint names controlled by the policy.
+
+    Required by the browser-side ``PolicyRunner`` to map policy outputs to
+    the correct actuators in the MuJoCo model.  When set, serialized as
+    ``policy_joint_names`` at the top level of the policy JSON config.
+    """
+
 
 class PolicyHandle:
     """Handle for configuring a policy and its commands.
@@ -145,6 +153,7 @@ class PolicyHandle:
         default_lin_vel_x: float = 0.5,
         default_lin_vel_y: float = 0.0,
         default_ang_vel_z: float = 0.0,
+        name: str = "velocity",
     ) -> PolicyHandle:
         """Add a standard velocity command group.
 
@@ -169,6 +178,7 @@ class PolicyHandle:
             default_lin_vel_x=default_lin_vel_x,
             default_lin_vel_y=default_lin_vel_y,
             default_ang_vel_z=default_ang_vel_z,
+            name=name,
         )
         self._config.commands[cmd.name] = cmd
         return self

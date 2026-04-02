@@ -51,7 +51,7 @@ def fetch_onnx_from_wandb_run(run_path: str) -> list[tuple[str, onnx.ModelProto]
 def fetch_pt_onnx_from_wandb_run(
     run_path: str,
     task_id: str,
-) -> list[tuple[str, onnx.ModelProto]]:
+) -> list[tuple[str, onnx.ModelProto, list[str]]]:
     """Download all ``model_*.pt`` checkpoints from a W&B run and convert each to ONNX.
 
     Checkpoints are sorted by training step before conversion, so the returned
@@ -67,8 +67,10 @@ def fetch_pt_onnx_from_wandb_run(
             reconstruct the environment and runner required for ONNX export.
 
     Returns:
-        List of ``(policy_name, onnx_model)`` tuples sorted by training step,
-        where policy_name is the filename without extension (e.g. ``"model_50"``).
+        List of ``(policy_name, onnx_model, joint_names)`` tuples sorted by
+        training step, where policy_name is the filename without extension
+        (e.g. ``"model_50"``) and joint_names is the ordered list of joints
+        controlled by the policy (from the environment's action manager).
 
     Raises:
         ImportError: If ``mjlab`` or ``torch`` are not installed.
@@ -101,7 +103,7 @@ def fetch_pt_onnx_from_wandb_run(
     # Sort by training step number (model_0.pt < model_50.pt < model_100.pt, …)
     pt_files.sort(key=lambda f: int(re.search(r"\d+", f.name).group()))  # type: ignore[union-attr]
 
-    results: list[tuple[str, onnx.ModelProto]] = []
+    results: list[tuple[str, onnx.ModelProto, list[str]]] = []
     with tempfile.TemporaryDirectory() as tmp_dir:
         tmp_path = Path(tmp_dir)
 
@@ -116,6 +118,26 @@ def fetch_pt_onnx_from_wandb_run(
         try:
             runner_cls = load_runner_cls(task_id) or MjlabOnPolicyRunner
             runner = runner_cls(env, asdict(agent_cfg), device="cpu")
+
+            # Collect policy joint names from the action manager.
+            # Use the first action term's target_names as the canonical ordered
+            # list of joints controlled by the policy.  Prefix each name with
+            # the entity name (e.g. "robot") so names match the MuJoCo model
+            # embedded in the scene (where joints are namespaced as
+            # "robot/joint_name").
+            joint_names: list[str] = []
+            inner_env = env.env if hasattr(env, "env") else env
+            action_mgr = getattr(inner_env, "action_manager", None)
+            if action_mgr is not None:
+                for term_name in action_mgr.active_terms:
+                    term = action_mgr.get_term(term_name)
+                    if hasattr(term, "target_names"):
+                        entity_name = getattr(
+                            getattr(term, "cfg", None), "entity_name", None
+                        )
+                        prefix = f"{entity_name}/" if entity_name else ""
+                        joint_names = [f"{prefix}{n}" for n in term.target_names]
+                        break
 
             for wandb_file in pt_files:
                 wandb_file.download(root=tmp_dir, replace=True)
@@ -132,7 +154,7 @@ def fetch_pt_onnx_from_wandb_run(
                 runner.export_policy_to_onnx(tmp_dir, onnx_filename)
 
                 model = onnx.load(str(tmp_path / onnx_filename))
-                results.append((name, model))
+                results.append((name, model, joint_names))
         finally:
             env.close()
 
