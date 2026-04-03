@@ -10,17 +10,18 @@ from mjlab.tasks.registry import (  # noqa: F401 - for task registrations
 )
 
 import mjswan
+from mjswan import ViewerConfig
 
 ENTITY = "ttktjmt-org"
 PROJECT = "mjlab"
 TASK_RUN_ID_MAP = {
-    # "Mjlab-Lift-Cube-Yam": "",
-    # "Mjlab-Lift-Cube-Yam-Depth": "",
-    # "Mjlab-Lift-Cube-Yam-Rgb": "",
+    # "Mjlab-Cartpole-Balance": "cartpole-balance",
+    # "Mjlab-Cartpole-Swingup": "cartpole-swingup",
+    # "Mjlab-Lift-Cube-Yam": "lift-cube-yam",
     "Mjlab-Velocity-Flat-Unitree-G1": "vel-flat-g1",
     "Mjlab-Velocity-Flat-Unitree-Go1": "vel-flat-go1-v3",
-    # "Mjlab-Velocity-Rough-Unitree-G1": "",
-    # "Mjlab-Velocity-Rough-Unitree-Go1": "",
+    # "Mjlab-Velocity-Rough-Unitree-G1": "vel-rough-g1",
+    # "Mjlab-Velocity-Rough-Unitree-Go1": "vel-rough-go1",
 }
 
 
@@ -31,6 +32,14 @@ def main():
     for task_id, run_id in TASK_RUN_ID_MAP.items():
         env_cfg = load_env_cfg(task_id)
         scene = project.add_mjlab_scene(task_id)
+        scene = scene.set_viewer_config(
+            ViewerConfig(
+                lookat=(0.0, 0.0, 0.4),
+                distance=3,
+                elevation=-20,
+                azimuth=30,
+            )
+        )
         policies = scene.add_policy_from_wandb(
             f"{ENTITY}/{PROJECT}/{run_id}",
             task_id=task_id,
