@@ -136,6 +136,13 @@ velocity_command_with_oscillators = ObsFunc("VelocityCommandWithOscillators")
 impedance_command = ObsFunc("ImpedanceCommand")
 """Impedance control command as an observation term."""
 
+joint_pos_cos_sin = ObsFunc("JointPosCosSin")
+"""Cosine and sine of a single joint angle. Shape: [num_envs, 2].
+
+Pass ``params={"joint_name": "<name>"}`` or ``params={"joint_index": <i>}``
+to select the target joint.
+"""
+
 # ---------------------------------------------------------------------------
 # Sensors (not supported in browser)
 # ---------------------------------------------------------------------------
@@ -186,6 +193,7 @@ __all__ = [
     "previous_actions",
     "velocity_command_with_oscillators",
     "impedance_command",
+    "joint_pos_cos_sin",
     "builtin_sensor",
     "height_scan",
 ]

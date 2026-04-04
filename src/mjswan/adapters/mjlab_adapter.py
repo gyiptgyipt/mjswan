@@ -94,13 +94,40 @@ def _adapt_obs_func(func: Any, term_name: str | None = None) -> ObsFunc:
     )
 
 
+def _sanitize_obs_params(params: dict[str, Any]) -> dict[str, Any]:
+    """Strip mjlab-specific params that are not JSON-serializable.
+
+    ``asset_cfg`` (a ``SceneEntityCfg``) is removed.  When it carries
+    ``joint_names``, the first name is promoted to ``joint_name`` so that
+    observation classes such as ``JointPosCosSin`` can resolve the correct
+    MuJoCo joint at runtime.
+    """
+    if "asset_cfg" not in params:
+        return params
+    result = {k: v for k, v in params.items() if k != "asset_cfg"}
+    asset_cfg = params["asset_cfg"]
+    if _is_from_mjlab(asset_cfg):
+        joint_names = getattr(asset_cfg, "joint_names", None)
+        if joint_names:
+            entity_name = getattr(asset_cfg, "name", None)
+            name = (
+                joint_names[0]
+                if isinstance(joint_names, (list, tuple))
+                else joint_names
+            )
+            # mjlab namespaces entity joints as "{entity_name}/{joint_name}"
+            result["joint_name"] = f"{entity_name}/{name}" if entity_name else name
+    return result
+
+
 def _adapt_obs_term(
     term: Any, term_name: str | None = None
 ) -> MjswanObservationTermCfg:
     """Convert a single mjlab ``ObservationTermCfg`` to mjswan."""
+    raw_params = dict(getattr(term, "params", None) or {})
     return MjswanObservationTermCfg(
         func=_adapt_obs_func(term.func, term_name=term_name),
-        params=dict(getattr(term, "params", None) or {}),
+        params=_sanitize_obs_params(raw_params),
         scale=getattr(term, "scale", None),
         clip=getattr(term, "clip", None),
         history_length=getattr(term, "history_length", 0) or 0,
@@ -226,12 +253,21 @@ def _adapt_action_cfg(term: Any) -> MjswanActionTermCfg | None:
 
     # Copy all matching dataclass fields from the mjlab instance
     kwargs: dict[str, Any] = {}
+    entity_name = getattr(term, "entity_name", None)
     for f in dataclasses.fields(mjswan_cls):
         if f.name == "unsupported_reason":
             continue
         val = getattr(term, f.name, dataclasses.MISSING)
         if val is not dataclasses.MISSING:
             kwargs[f.name] = val
+
+    # mjlab namespaces actuator names as "{entity_name}/{name}"; prefix them
+    # so they match the fully-qualified policy_joint_names at runtime.
+    if entity_name and "actuator_names" in kwargs:
+        raw = kwargs["actuator_names"]
+        if isinstance(raw, (list, tuple)):
+            kwargs["actuator_names"] = tuple(f"{entity_name}/{n}" for n in raw)
+
     return mjswan_cls(**kwargs)
 
 
@@ -287,10 +323,12 @@ def resolve_action_scales(
         return resolved if resolved else value
 
     for term in actions.values():
-        if hasattr(term, "scale") and isinstance(term.scale, dict):
-            term.scale = _resolve(term.scale)
-        if hasattr(term, "offset") and isinstance(term.offset, dict):
-            term.offset = _resolve(term.offset)
+        scale = getattr(term, "scale", None)
+        if isinstance(scale, dict):
+            setattr(term, "scale", _resolve(scale))
+        offset = getattr(term, "offset", None)
+        if isinstance(offset, dict):
+            setattr(term, "offset", _resolve(offset))
 
 
 __all__ = [

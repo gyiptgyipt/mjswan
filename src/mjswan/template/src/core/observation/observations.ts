@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import type { MjModel } from '@mujoco/mujoco';
 import { ObservationBase } from './ObservationBase';
 import type { ObservationConfig } from './ObservationBase';
 import {
@@ -523,10 +524,19 @@ export class JointVelocities extends ObservationBase {
   private historySteps: number;
   private history: Float32Array[];
   private scale: Float32Array | null;
+  private qvelAdr: number | null;
 
   constructor(runner: PolicyRunner, config: ObservationConfig) {
     super(runner, config);
-    this.numJoints = runner.getNumActions();
+    const jointName = config.joint_name as string | undefined;
+    if (jointName !== undefined) {
+      const mjModel = runner.getContext()?.mjModel ?? null;
+      this.qvelAdr = mjModel !== null ? this.resolveQvelAdr(mjModel, jointName) : 0;
+      this.numJoints = 1;
+    } else {
+      this.qvelAdr = null;
+      this.numJoints = runner.getNumActions();
+    }
     this.historySteps = Math.max(1, Math.floor((config.history_steps as number | undefined) ?? 1));
     this.history = Array.from(
       { length: this.historySteps },
@@ -567,6 +577,13 @@ export class JointVelocities extends ObservationBase {
   }
 
   private computeCurrent(state?: PolicyState): Float32Array {
+    if (this.qvelAdr !== null) {
+      const qvel = this.runner.getContext()?.mjData?.qvel;
+      const vel = qvel !== undefined ? qvel[this.qvelAdr] : 0.0;
+      const out = new Float32Array([vel]);
+      if (this.scale) out[0] *= this.scale[0] ?? 1.0;
+      return out;
+    }
     const value = state?.jointVel ?? new Float32Array(this.numJoints);
     const out = new Float32Array(value);
     if (this.scale) {
@@ -575,6 +592,20 @@ export class JointVelocities extends ObservationBase {
       }
     }
     return out;
+  }
+
+  private resolveQvelAdr(mjModel: MjModel, jointName: string): number {
+    const namesArray = new Uint8Array(mjModel.names);
+    const decoder = new TextDecoder();
+    for (let j = 0; j < mjModel.njnt; j++) {
+      let start = mjModel.name_jntadr[j];
+      let end = start;
+      while (end < namesArray.length && namesArray[end] !== 0) end++;
+      if (decoder.decode(namesArray.subarray(start, end)) === jointName) {
+        return mjModel.jnt_dofadr[j];
+      }
+    }
+    throw new Error(`JointVelocities: joint "${jointName}" not found in model`);
   }
 }
 
@@ -675,6 +706,55 @@ export class ImpedanceCommand extends ObservationBase {
   }
 }
 
+export class JointPosCosSin extends ObservationBase {
+  private qposAdr: number;
+
+  constructor(runner: PolicyRunner, config: ObservationConfig) {
+    super(runner, config);
+    const mjModel = runner.getContext()?.mjModel ?? null;
+    this.qposAdr = mjModel !== null ? this.resolveQposAdr(mjModel) : 0;
+  }
+
+  get size(): number {
+    return 2;
+  }
+
+  compute(): Float32Array {
+    const qpos = this.runner.getContext()?.mjData?.qpos;
+    const angle = qpos !== undefined ? qpos[this.qposAdr] : 0.0;
+    return new Float32Array([Math.cos(angle), Math.sin(angle)]);
+  }
+
+  private resolveQposAdr(mjModel: MjModel): number {
+    const jointName = this.config.joint_name as string | undefined;
+    if (jointName !== undefined) {
+      const names = this.getJointNames(mjModel);
+      const idx = names.indexOf(jointName);
+      if (idx < 0) {
+        throw new Error(`JointPosCosSin: joint "${jointName}" not found in model`);
+      }
+      return mjModel.jnt_qposadr[idx];
+    }
+    const jointIndex = (this.config.joint_index as number | undefined) ?? 0;
+    return mjModel.jnt_qposadr[jointIndex];
+  }
+
+  private getJointNames(mjModel: MjModel): string[] {
+    const namesArray = new Uint8Array(mjModel.names);
+    const decoder = new TextDecoder();
+    const names: string[] = [];
+    for (let j = 0; j < mjModel.njnt; j++) {
+      let start = mjModel.name_jntadr[j];
+      let end = start;
+      while (end < namesArray.length && namesArray[end] !== 0) {
+        end++;
+      }
+      names.push(decoder.decode(namesArray.subarray(start, end)));
+    }
+    return names;
+  }
+}
+
 // Legacy aliases for config compatibility.
 export class ProjectedGravity extends ProjectedGravityB { }
 export class JointPositions extends JointPos { }
@@ -703,4 +783,5 @@ export const Observations = {
   GeneratedCommands: GeneratedCommandsObservation,
   GeneratedCommandsObservation,
   ImpedanceCommand,
+  JointPosCosSin,
 };

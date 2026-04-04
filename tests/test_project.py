@@ -5,11 +5,15 @@ Tests the "contract" of the builder's hierarchical configuration API:
   Builder → ProjectHandle → SceneHandle → PolicyHandle
 """
 
+from pathlib import Path
+
+import mujoco
 import pytest
 
 import mjswan
 from mjswan.builder import Builder
 from mjswan.command import SliderConfig
+from mjswan.project import _collect_mjlab_scene_assets
 from mjswan.scene import SceneConfig
 
 
@@ -64,6 +68,52 @@ class TestProjectHandle:
         project = Builder().add_project(name="My Project", id="my_project")
         assert project.name == "My Project"
         assert project.id == "my_project"
+
+    def test_collect_mjlab_scene_assets_uses_terrain_and_entities(
+        self, monkeypatch, tmp_path: Path
+    ):
+        def make_spec(label: str) -> mujoco.MjSpec:
+            xml_path = tmp_path / f"{label}.xml"
+            xml_path.write_text(
+                f'<mujoco model="{label}">'
+                '<worldbody><geom type="sphere" size="0.1"/></worldbody>'
+                "</mujoco>"
+            )
+            return mujoco.MjSpec.from_file(str(xml_path))
+
+        class FakeCfg:
+            def __init__(self, spec: mujoco.MjSpec):
+                self._spec = spec
+
+            def spec_fn(self):
+                return self._spec
+
+        terrain_spec = make_spec("terrain")
+        robot_spec = make_spec("robot")
+        prop_spec = make_spec("prop")
+
+        class FakeSceneCfg:
+            terrain = FakeCfg(terrain_spec)
+            entities = {
+                "robot": FakeCfg(robot_spec),
+                "prop": FakeCfg(prop_spec),
+            }
+
+        def fake_collect_spec_assets(spec):
+            return {f"{spec.modelname}.bin": spec.modelname.encode()}
+
+        monkeypatch.setattr(
+            "mjswan.project.collect_spec_assets",
+            fake_collect_spec_assets,
+        )
+
+        assets = _collect_mjlab_scene_assets(FakeSceneCfg())
+
+        assert assets == {
+            "terrain.bin": b"terrain",
+            "robot.bin": b"robot",
+            "prop.bin": b"prop",
+        }
 
 
 # ===========================================================================

@@ -11,17 +11,70 @@ from mjlab.tasks.registry import (  # noqa: F401 - for task registrations
 
 import mjswan
 from mjswan import ViewerConfig
+from mjswan.envs.mdp import observations as obs_fns
+
+pole_angle_cos_sin = obs_fns.joint_pos_cos_sin  # cartpole semantic alias
 
 ENTITY = "ttktjmt-org"
 PROJECT = "mjlab"
-TASK_RUN_ID_MAP = {
-    # "Mjlab-Cartpole-Balance": "cartpole-balance",
-    # "Mjlab-Cartpole-Swingup": "cartpole-swingup",
-    # "Mjlab-Lift-Cube-Yam": "lift-cube-yam",
-    "Mjlab-Velocity-Flat-Unitree-G1": "vel-flat-g1",
-    "Mjlab-Velocity-Flat-Unitree-Go1": "vel-flat-go1-v3",
-    # "Mjlab-Velocity-Rough-Unitree-G1": "vel-rough-g1",
-    # "Mjlab-Velocity-Rough-Unitree-Go1": "vel-rough-go1",
+TASK_CONFIG = {
+    # "Mjlab-Cartpole-Balance": {
+    #     "wandb_run_id": "cartpole-balance-v2",
+    #     "viewer_cfg": ViewerConfig(
+    #         lookat=(0.0, 0.0, 0.4),
+    #         distance=5,
+    #         elevation=-20,
+    #         azimuth=-90,
+    #     ),
+    # },
+    # "Mjlab-Cartpole-Swingup": {
+    #     "wandb_run_id": "cartpole-swingup",
+    #     "viewer_cfg": ViewerConfig(
+    #         lookat=(0.0, 0.0, 0.4),
+    #         distance=5,
+    #         elevation=-20,
+    #         azimuth=-90,
+    #     ),
+    # },
+    # "Mjlab-Lift-Cube-Yam": {
+    #     "wandb_run_id": "ajfybu8m",
+    #     "viewer_cfg": ViewerConfig(
+    #         lookat=(0.0, 0.0, 0.4),
+    #         distance=3,
+    #         elevation=-20,
+    #         azimuth=30,
+    #     ),
+    # },
+    "Mjlab-Velocity-Flat-Unitree-G1": {
+        "wandb_run_id": "vel-flat-g1",
+        "viewer_cfg": ViewerConfig(
+            lookat=(0.0, 0.0, 0.4),
+            distance=3,
+            elevation=-20,
+            azimuth=30,
+        ),
+    },
+    "Mjlab-Velocity-Flat-Unitree-Go1": {
+        "wandb_run_id": "vel-flat-go1-v3",
+        "viewer_cfg": ViewerConfig(
+            lookat=(0.0, 0.0, 0.4),
+            distance=3,
+            elevation=-20,
+            azimuth=30,
+        ),
+    },
+    # "Mjlab-Velocity-Rough-Unitree-G1": {
+    #     "wandb_run_id": "3xk1jbng",
+    #     "viewer_cfg": ViewerConfig(
+    #         lookat=(0.0, 0.0, 0.4),
+    #         distance=3,
+    #         elevation=-20,
+    #         azimuth=30,
+    #     ),
+    # },
+    # "Mjlab-Velocity-Rough-Unitree-Go1": {
+    #     "wandb_run_id": "vel-rough-go1",
+    # },
 }
 
 
@@ -29,26 +82,23 @@ def main():
     builder = mjswan.Builder()
     project = builder.add_project(name="mjlab Examples")
 
-    for task_id, run_id in TASK_RUN_ID_MAP.items():
+    for task_id, config in TASK_CONFIG.items():
         env_cfg = load_env_cfg(task_id)
         scene = project.add_mjlab_scene(task_id)
-        scene = scene.set_viewer_config(
-            ViewerConfig(
-                lookat=(0.0, 0.0, 0.4),
-                distance=3,
-                elevation=-20,
-                azimuth=30,
-            )
-        )
+        scene = scene.set_viewer_config(config["viewer_cfg"])
         policies = scene.add_policy_from_wandb(
-            f"{ENTITY}/{PROJECT}/{run_id}",
+            f"{ENTITY}/{PROJECT}/{config['wandb_run_id']}",
             task_id=task_id,
             observations={"policy": env_cfg.observations["actor"]},
             actions=env_cfg.actions,
             terminations=env_cfg.terminations,
         )
         for p in policies:
-            p.add_velocity_command(name="twist")
+            if task_id in [
+                "Mjlab-Velocity-Flat-Unitree-G1",
+                "Mjlab-Velocity-Flat-Unitree-Go1",
+            ]:
+                p.add_velocity_command(name="twist")
 
     app = builder.build()
     app.launch()
