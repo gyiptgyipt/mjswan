@@ -43,10 +43,8 @@ class Builder:
         """Initialize a new Builder instance.
 
         Args:
-            base_path: Base path for the application (e.g., '/mjswan/').
-                      This is used for deployment to subdirectories.
-            gtm_id: Google Tag Manager container ID (e.g., 'GTM-XXXXXXX').
-                   If provided, the GTM snippet is injected into the built HTML.
+            base_path: Base path for subdirectory deployment (e.g., '/mjswan/').
+            gtm_id: Google Tag Manager ID (e.g., 'GTM-XXXXXXX'). Injects GTM snippet if set.
         """
         self._projects: list[ProjectConfig] = []
         self._base_path = base_path
@@ -104,10 +102,7 @@ class Builder:
         Returns:
             ProjectHandle for adding scenes and further configuration.
         """
-        # Determine project ID:
-        # - If id is explicitly provided, use it
-        # - First project without id defaults to None (main route)
-        # - Subsequent projects without id default to sanitized name
+        # Project ID: explicit > None for first project (main route) > sanitized name
         if id is not None:
             project_id = id
         elif not self._projects:
@@ -264,9 +259,9 @@ class Builder:
         return name
 
     def _save_web(self, output_path: Path) -> None:
-        """Save as a complete web application with hybrid structure.
+        """Save as a complete web application.
 
-        Output Structure:
+        Output structure:
             dist/
             ├── index.html
             ├── logo.svg
@@ -484,12 +479,17 @@ class Builder:
                             or policy.observations
                             or policy.actions
                             or policy.terminations
+                            or policy.policy_joint_names
                         ):
                             # No config_path but MDP components defined
                             target = policy_path.with_suffix(".json")
                             data: dict = {
                                 "onnx": {"path": policy_path.name},
                             }
+                            if policy.policy_joint_names:
+                                data["policy_joint_names"] = policy.policy_joint_names
+                            if policy.default_joint_pos:
+                                data["default_joint_pos"] = policy.default_joint_pos
                             if policy.commands:
                                 data["commands"] = {
                                     name: cmd.to_dict()
@@ -506,10 +506,13 @@ class Builder:
                                     for name, cfg in policy.actions.items()
                                 }
                             if policy.terminations:
-                                data["terminations"] = {
+                                terminations = {
                                     name: cfg.to_dict()
                                     for name, cfg in policy.terminations.items()
+                                    if cfg.func.unsupported_reason is None
                                 }
+                                if terminations:
+                                    data["terminations"] = terminations
                             with open(target, "w") as f:
                                 json.dump(data, f, indent=2)
 

@@ -132,21 +132,11 @@ def _rewrite_xml_paths(xml_str: str, mesh_dir: str, texture_dir: str) -> str:
             if f:
                 elem.set("file", _make_zip_safe_path(f))
 
-    # Fix the <default> hierarchy that spec.to_xml() may emit incorrectly:
-    #
-    # 1. Remove nested <default> elements with no (or empty) class attribute.
-    #    MuJoCo rejects them with "empty class name".  The root <default>
-    #    (direct child of <mujoco>) legitimately has no class, so only
-    #    children of other <default> elements are candidates for removal.
-    #
-    # 2. Merge <default class="X"> elements that are wrapped in another
-    #    <default class="X"> with the same name.  MuJoCo rejects them with
-    #    "repeated default class name".  We inline the inner element's children
-    #    into the outer one and remove the inner duplicate.
+    # Fix <default> hierarchy errors from spec.to_xml():
+    # 1. Remove classless nested defaults ("empty class name" error).
+    # 2. Merge same-named nested defaults ("repeated default class name" error).
     def _fix_default_tree(elem: ET.Element) -> None:
-        # Only remove classless <default> children when the parent is itself a
-        # <default> element.  The root <default> (direct child of <mujoco>) has
-        # no class legitimately and must not be removed.
+        # Don't remove classless root <default> (direct child of <mujoco>).
         parent_is_default = elem.tag == "default"
         for child in list(elem):
             if child.tag != "default":
@@ -177,11 +167,7 @@ def _rewrite_xml_paths(xml_str: str, mesh_dir: str, texture_dir: str) -> str:
 
 
 def _buffer_texture_to_png(data: bytes | bytearray, width: int, height: int) -> bytes:
-    """Encode raw RGB/RGBA texture buffer data as a PNG bytestring (stdlib only).
-
-    MuJoCo buffer textures store pixel data in memory without a backing file.
-    This function converts that raw data to a portable PNG so it can be
-    included in a ZIP archive.
+    """Encode raw RGB/RGBA texture buffer data (from MuJoCo) as PNG bytes.
 
     Args:
         data: Raw pixel bytes (RGB or RGBA, uint8, row-major).
@@ -192,7 +178,7 @@ def _buffer_texture_to_png(data: bytes | bytearray, width: int, height: int) -> 
         PNG-encoded bytes.
 
     Raises:
-        ValueError: If dimensions are zero or the channel count is unsupported.
+        ValueError: If dimensions are zero or channel count is unsupported.
     """
     raw = bytes(data) if isinstance(data, (bytes, bytearray)) else data.tobytes()
 
@@ -241,11 +227,8 @@ def to_zip_deflated(spec: mujoco.MjSpec, file: Union[str, IO[bytes]]) -> None:
     mesh_dir = spec.meshdir or ""
     texture_dir = spec.texturedir or ""
 
-    # Collect asset files.  For each referenced file we first try to read it
-    # from disk; if not found we fall back to spec.assets using suffix matching.
-    # Libraries like mjlab store model files in spec.assets under keys with an
-    # extra path prefix (e.g. "assets/robot/model.stl") while the XML and
-    # mesh.file use the shorter relative path ("robot/model.stl").
+    # Collect assets from disk, falling back to spec.assets with suffix matching
+    # (mjlab stores assets under prefixed keys like "assets/robot/model.stl").
     files_to_zip: dict[str, bytes | str] = {}
 
     def _read_asset(rel: str) -> bytes | None:
@@ -298,10 +281,8 @@ def to_zip_deflated(spec: mujoco.MjSpec, file: Union[str, IO[bytes]]) -> None:
         if data is not None:
             files_to_zip[_make_zip_safe_path(skin.file)] = data
 
-    # Export buffer textures (no backing file) as PNG before serialising to XML.
-    # MuJoCo's spec.to_xml() raises FatalError for buffer textures, so we
-    # temporarily assign each one a filename, write its PNG bytes into the ZIP,
-    # then restore the spec to its original state after to_xml() returns.
+    # Buffer textures have no backing file and cause spec.to_xml() to raise FatalError.
+    # Temporarily assign each one a filename and restore after to_xml().
     _buffer_tex_restore: list[tuple[mujoco.MjsTexture, str]] = []
     for i, texture in enumerate(spec.textures):
         if texture.file:
@@ -347,25 +328,12 @@ def to_zip_deflated(spec: mujoco.MjSpec, file: Union[str, IO[bytes]]) -> None:
 
 
 def name2id(name: str) -> str:
-    """Convert a name to a URL-friendly identifier.
-
-    This function normalizes names by converting them to lowercase
-    and replacing spaces and hyphens with underscores, making them
-    suitable for use in URLs, file paths, and identifiers.
-
-    Args:
-        name: The name to sanitize.
-
-    Returns:
-        A URL-friendly identifier string with lowercase letters,
-        underscores instead of spaces and hyphens.
+    """Convert a name to a URL-friendly identifier (lowercase, spaces/hyphens → underscores).
 
     Examples:
         >>> name2id("My Project")
         'my_project'
         >>> name2id("Test-Scene")
         'test_scene'
-        >>> name2id("Complex Name-With Spaces")
-        'complex_name_with_spaces'
     """
     return name.lower().replace(" ", "_").replace("-", "_")

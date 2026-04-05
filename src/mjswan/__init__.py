@@ -10,10 +10,14 @@ from .builder import Builder
 from .command import (
     Button,
     ButtonConfig,
-    CommandGroupConfig,
     CommandInput,
+    CommandTermConfig,
+    CommandTermSpec,
+    CommandUiConfig,
     Slider,
     SliderConfig,
+    register_command_term,
+    ui_command,
     velocity_command,
 )
 from .envs.mdp.actions import (
@@ -21,6 +25,7 @@ from .envs.mdp.actions import (
     JointEffortActionCfg,
     JointPositionActionCfg,
 )
+from .envs.mdp.observations import ObsFunc, register_obs_func
 from .managers.observation_manager import ObservationGroupCfg, ObservationTermCfg
 from .managers.termination_manager import TerminationTermCfg
 from .policy import PolicyConfig, PolicyHandle
@@ -44,6 +49,9 @@ __all__ = [
     "ViewerConfig",
     "SplatConfig",
     "PolicyConfig",
+    # Custom observation registry
+    "ObsFunc",
+    "register_obs_func",
     # MDP config (mjlab-compatible)
     "ObservationGroupCfg",
     "ObservationTermCfg",
@@ -56,7 +64,11 @@ __all__ = [
     "SliderConfig",
     "Button",
     "ButtonConfig",
-    "CommandGroupConfig",
     "CommandInput",
+    "CommandTermConfig",
+    "CommandTermSpec",
+    "CommandUiConfig",
+    "register_command_term",
+    "ui_command",
     "velocity_command",
 ]

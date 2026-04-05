@@ -12,6 +12,7 @@ from typing import TYPE_CHECKING, Any
 import mujoco
 
 from .scene import SceneConfig, SceneHandle
+from .utils import collect_spec_assets
 
 if TYPE_CHECKING:
     from .builder import Builder
@@ -146,7 +147,29 @@ class ProjectHandle:
         env_cfg = load_env_cfg(task_id)
         env_cfg.scene.num_envs = 1
         scene = Scene(env_cfg.scene, device="cpu")
+        scene.spec.assets.update(_collect_mjlab_scene_assets(env_cfg.scene))
         return self.add_scene(spec=scene.spec, name=task_id)
+
+
+def _collect_mjlab_scene_assets(scene_cfg: Any) -> dict[str, bytes]:
+    """Collect assets from mjlab scene component specs before they are flattened."""
+    assets: dict[str, bytes] = {}
+
+    spec_cfgs = [getattr(scene_cfg, "terrain", None)]
+    entities = getattr(scene_cfg, "entities", {})
+    if isinstance(entities, dict):
+        spec_cfgs.extend(entities.values())
+
+    for cfg in spec_cfgs:
+        spec_fn = getattr(cfg, "spec_fn", None)
+        if not callable(spec_fn):
+            continue
+        spec = spec_fn()
+        if not isinstance(spec, mujoco.MjSpec):
+            continue
+        assets.update(collect_spec_assets(spec))
+
+    return assets
 
 
 __all__ = ["ProjectConfig", "ProjectHandle"]

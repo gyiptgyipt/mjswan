@@ -6,14 +6,22 @@ managing MuJoCo scenes and their associated policies.
 
 from __future__ import annotations
 
+import re
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
 import mujoco
+import numpy as np
 import onnx
 
-from .adapters import adapt_actions, adapt_observations, adapt_terminations
+from .adapters import (
+    adapt_actions,
+    adapt_commands,
+    adapt_observations,
+    adapt_terminations,
+    resolve_action_scales,
+)
 from .policy import PolicyConfig, PolicyHandle
 from .splat import SplatConfig, SplatHandle
 from .viewer_config import ViewerConfig
@@ -23,6 +31,115 @@ if TYPE_CHECKING:
     from .managers.observation_manager import ObservationGroupCfg
     from .managers.termination_manager import TerminationTermCfg
     from .project import ProjectHandle
+
+
+def _get_scene_model(scene_config: SceneConfig) -> mujoco.MjModel | None:
+    if scene_config.model is not None:
+        return scene_config.model
+    if scene_config.spec is None:
+        return None
+    try:
+        return scene_config.spec.compile()
+    except Exception:
+        return None
+
+
+def _get_default_qpos(model: mujoco.MjModel) -> list[float]:
+    if model.nkey > 0:
+        try:
+            key_qpos = np.asarray(model.key_qpos).reshape(model.nkey, model.nq)
+            return [float(v) for v in key_qpos[0]]
+        except Exception:
+            pass
+    return [float(v) for v in np.asarray(model.qpos0).reshape(model.nq)]
+
+
+def _resolve_observation_joints(
+    model: mujoco.MjModel,
+    config: dict[str, Any],
+) -> tuple[list[str], list[float]] | None:
+    joint_names_cfg = config.get("joint_names")
+    entity_name = config.get("entity_name")
+    if joint_names_cfg is None and entity_name is None:
+        return None
+
+    default_qpos = _get_default_qpos(model)
+    prefix = f"{entity_name}/" if entity_name else ""
+    joints: list[tuple[str, int]] = []
+    for i in range(model.njnt):
+        if model.jnt_type[i] == mujoco.mjtJoint.mjJNT_FREE:
+            continue
+        name = model.joint(i).name
+        if prefix and not name.startswith(prefix):
+            continue
+        joints.append((name, int(model.jnt_qposadr[i])))
+
+    if not joints:
+        return None
+
+    if joint_names_cfg in (None, "all"):
+        selected = joints
+    else:
+        patterns = (
+            list(joint_names_cfg)
+            if isinstance(joint_names_cfg, (list, tuple))
+            else [joint_names_cfg]
+        )
+        regexes = []
+        for pattern in patterns:
+            try:
+                regexes.append(re.compile(f"^(?:{pattern})$"))
+            except re.error:
+                continue
+        if not regexes:
+            return None
+
+        def _matches(name: str) -> bool:
+            bare = name[len(prefix) :] if prefix and name.startswith(prefix) else name
+            return any(rex.fullmatch(bare) or rex.fullmatch(name) for rex in regexes)
+
+        selected = [(name, adr) for name, adr in joints if _matches(name)]
+
+    if not selected:
+        return None
+
+    names = [name for name, _ in selected]
+    defaults = [
+        default_qpos[adr] if adr < len(default_qpos) else 0.0 for _, adr in selected
+    ]
+    return names, defaults
+
+
+def _enrich_joint_observations(
+    scene_config: SceneConfig,
+    observations: dict[str, Any] | None,
+) -> None:
+    if observations is None:
+        return
+    model = _get_scene_model(scene_config)
+    if model is None:
+        return
+
+    for group in observations.values():
+        terms = getattr(group, "terms", None)
+        if not isinstance(terms, dict):
+            continue
+        for term in terms.values():
+            ts_name = getattr(getattr(term, "func", None), "ts_name", None)
+            if ts_name not in {"JointPos", "JointPositions", "JointVelocities"}:
+                continue
+            params = dict(getattr(term, "params", {}) or {})
+            merged = {**getattr(term.func, "defaults", {}), **params}
+            if merged.get("joint_name") is not None:
+                continue
+            resolved = _resolve_observation_joints(model, merged)
+            if resolved is None:
+                continue
+            joint_names, default_joint_pos = resolved
+            params["joint_names"] = joint_names
+            if ts_name in {"JointPos", "JointPositions"}:
+                params["default_joint_pos"] = default_joint_pos
+            term.params = params
 
 
 @dataclass
@@ -84,8 +201,11 @@ class SceneHandle:
         source_path: str | None = None,
         config_path: str | None = None,
         observations: dict[str, ObservationGroupCfg] | dict[str, Any] | None = None,
+        commands: Mapping[str, Any] | None = None,
         actions: Mapping[str, ActionTermCfg] | Mapping[str, Any] | None = None,
         terminations: dict[str, TerminationTermCfg] | dict[str, Any] | None = None,
+        policy_joint_names: list[str] | None = None,
+        default_joint_pos: list[float] | None = None,
     ) -> PolicyHandle:
         """Add an ONNX policy to this scene.
 
@@ -98,6 +218,9 @@ class SceneHandle:
             observations: Observation group configurations.  Accepts both
                 mjswan and mjlab ``ObservationGroupCfg`` instances — mjlab
                 types are converted automatically (mjlab is a soft dependency).
+            commands: Command term configurations. Accepts both mjswan and
+                mjlab ``CommandTermCfg`` instances. Custom mjlab terms are
+                converted through the Python command-term registry.
             actions: Action term configurations.  Accepts both mjswan and
                 mjlab ``ActionTermCfg`` subclass instances.
             terminations: Termination term configurations.  Accepts both
@@ -137,8 +260,12 @@ class SceneHandle:
 
         # Adapt mjlab types to mjswan internals (no-op if already mjswan)
         adapted_observations = adapt_observations(observations)
+        adapted_commands = adapt_commands(commands)
         adapted_actions = adapt_actions(actions)
         adapted_terminations = adapt_terminations(terminations)
+        _enrich_joint_observations(self._config, adapted_observations)
+        if adapted_actions and policy_joint_names:
+            resolve_action_scales(adapted_actions, policy_joint_names)
 
         policy_config = PolicyConfig(
             name=name,
@@ -146,12 +273,151 @@ class SceneHandle:
             metadata=metadata,
             source_path=source_path,
             config_path=config_path,
+            commands=adapted_commands or {},
             observations=adapted_observations,
             actions=adapted_actions,
             terminations=adapted_terminations,
+            policy_joint_names=policy_joint_names,
+            default_joint_pos=default_joint_pos,
         )
         self._config.policies.append(policy_config)
         return PolicyHandle(policy_config, self)
+
+    def add_policy_from_wandb(
+        self,
+        run_path: str | list[str],
+        *,
+        only_latest: bool = False,
+        task_id: str | None = None,
+        config_path: str | None = None,
+        metadata: dict[str, Any] | None = None,
+        observations: dict[str, ObservationGroupCfg] | dict[str, Any] | None = None,
+        commands: Mapping[str, Any] | None = None,
+        actions: Mapping[str, ActionTermCfg] | Mapping[str, Any] | None = None,
+        terminations: dict[str, TerminationTermCfg] | dict[str, Any] | None = None,
+    ) -> list[PolicyHandle]:
+        """Add ONNX policies fetched from one or more W&B runs to this scene.
+
+        ``config_path``, ``observations``, ``commands``, ``actions``, and
+        ``terminations`` are
+        applied identically to every policy fetched from every run.
+
+        Args:
+            run_path: W&B run path in the format ``"entity/project/run_id"``, or
+                a list of such paths to fetch policies from multiple runs.
+            only_latest: If ``False`` (default), fetches all ``model_*.pt``
+                checkpoints and converts each to ONNX via mjlab — requires
+                ``mjlab`` and ``torch`` to be installed and ``task_id`` to be
+                provided.  If ``True``, fetches only the ``.onnx`` file from
+                each run (the latest exported checkpoint).
+            task_id: mjlab task identifier required when ``only_latest=False``
+                (e.g. ``"go2_flat"``).  Ignored when ``only_latest=True``.
+            config_path: Optional path to a policy config JSON file applied to
+                all fetched policies.
+            metadata: Optional metadata dictionary applied to all fetched
+                policies.
+            observations: Observation group configurations applied to all
+                fetched policies.
+            commands: Command term configurations applied to all fetched policies.
+            actions: Action term configurations applied to all fetched policies.
+            terminations: Termination term configurations applied to all fetched
+                policies.
+
+        Returns:
+            Flat list of :class:`PolicyHandle` instances across all runs, in the
+            order the runs were provided.
+
+        Raises:
+            ValueError: If ``only_latest=False`` and ``task_id`` is not provided,
+                or if no matching files are found in a W&B run.
+            ImportError: If ``only_latest=False`` and ``mjlab``/``torch`` are not
+                installed.
+
+        Example — all logged checkpoints from a single run (default):
+            ```python
+            scene.add_policy_from_wandb(
+                run_path="my-org/my-project/run-id",
+                task_id="go2_flat",
+                config_path="assets/locomotion.json",
+                actions={"joint_pos": JointPositionActionCfg(scale=1.0)},
+            )
+            ```
+
+        Example — latest checkpoint only:
+            ```python
+            scene.add_policy_from_wandb(
+                run_path="my-org/my-project/run-id",
+                only_latest=True,
+                config_path="assets/locomotion.json",
+                actions={"joint_pos": JointPositionActionCfg(scale=1.0)},
+            )
+            ```
+
+        Example — multiple runs:
+            ```python
+            scene.add_policy_from_wandb(
+                run_path=[
+                    "my-org/my-project/run-id-1",
+                    "my-org/my-project/run-id-2",
+                ],
+                only_latest=True,
+                config_path="assets/locomotion.json",
+                actions={"joint_pos": JointPositionActionCfg(scale=1.0)},
+            )
+            ```
+        """
+        if not only_latest and task_id is None:
+            raise ValueError(
+                "task_id is required when only_latest=False. "
+                "Provide the mjlab task identifier, e.g. task_id='go2_flat'."
+            )
+
+        run_paths = [run_path] if isinstance(run_path, str) else run_path
+
+        handles = []
+        seen_names: set[str] = set()
+        for path in run_paths:
+            if only_latest:
+                from .wandb_utils import fetch_onnx_from_wandb_run
+
+                name, model = fetch_onnx_from_wandb_run(path)
+                if name not in seen_names:
+                    seen_names.add(name)
+                    handle = self.add_policy(
+                        name=name,
+                        policy=model,
+                        config_path=config_path,
+                        metadata=metadata,
+                        observations=observations,
+                        commands=commands,
+                        actions=actions,
+                        terminations=terminations,
+                    )
+                    handles.append(handle)
+            else:
+                assert task_id is not None
+                from .wandb_utils import fetch_pt_onnx_from_wandb_run
+
+                for name, model, joint_names, djp in fetch_pt_onnx_from_wandb_run(
+                    path, task_id
+                ):
+                    if name in seen_names:
+                        continue
+                    seen_names.add(name)
+                    handle = self.add_policy(
+                        name=name,
+                        policy=model,
+                        config_path=config_path,
+                        metadata=metadata,
+                        observations=observations,
+                        commands=commands,
+                        actions=actions,
+                        terminations=terminations,
+                        policy_joint_names=joint_names or None,
+                        default_joint_pos=djp or None,
+                    )
+                    handles.append(handle)
+        return handles
 
     def add_splat(
         self,
